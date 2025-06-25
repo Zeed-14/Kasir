@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toko Sembako Sejahtera</title>
+    <!-- External Libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <!-- Local Files -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div class="spinner"></div>
+        <p style="margin-top: 1rem; color: #333;">Menyiapkan aplikasi...</p>
+    </div>
+
+    <!-- Header Section -->
+    <header>
+        <div class="logo-container">
+            <img src="https://placehold.co/100x100/4CAF50/FFFFFF?text=Toko" alt="Logo Toko" class="logo-img" id="storeLogo">
+            <div class="logo-text">
+                <h1 id="storeName">Toko Sembako Sejahtera</h1>
+                <p id="storeTagline">Melayani dengan hati</p>
+            </div>
+        </div>
+        
+        <nav class="nav-desktop">
+            <a href="#" class="nav-item active" data-page="dashboard"><i class="fas fa-home"></i><span>Beranda</span></a>
+            <a href="#" class="nav-item" data-page="cashier"><i class="fas fa-cash-register"></i><span>Kasir</span></a>
+            <a href="#" class="nav-item" data-page="products"><i class="fas fa-boxes"></i><span>Produk</span></a>
+            <a href="#" class="nav-item" data-page="settings"><i class="fas fa-cog"></i><span>Pengaturan</span></a>
+        </nav>
+    </header>
+
+    <!-- Mobile Navigation -->
+    <nav class="nav-mobile">
+        <a href="#" class="nav-item active" data-page="dashboard"><i class="fas fa-home"></i><span>Beranda</span></a>
+        <a href="#" class="nav-item" data-page="cashier"><i class="fas fa-cash-register"></i><span>Kasir</span></a>
+        <a href="#" class="nav-item" data-page="products"><i class="fas fa-boxes"></i><span>Produk</span></a>
+        <a href="#" class="nav-item" data-page="settings"><i class="fas fa-cog"></i><span>Pengaturan</span></a>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
+        <div class="toast-container" id="toastContainer"></div>
+
+        <!-- Dashboard Page -->
+        <div class="page active" id="dashboard">
+            <h2>Beranda</h2>
+            <div class="dashboard-grid">
+                <div class="card"><div class="card-header"><div class="card-title">Penjualan Hari Ini</div><i class="fas fa-shopping-cart"></i></div><div class="card-value" id="todaySales">Rp 0</div><div class="card-footer" id="salesComparison">+0% dari kemarin</div></div>
+                <div class="card"><div class="card-header"><div class="card-title">Total Pendapatan</div><i class="fas fa-wallet"></i></div><div class="card-value" id="weeklyIncome">Rp 0</div><div class="card-footer">Minggu ini</div></div>
+                <div class="card"><div class="card-header"><div class="card-title">Produk Terjual</div><i class="fas fa-box-open"></i></div><div class="card-value" id="soldProducts">0</div><div class="card-footer">Hari ini</div></div>
+                <div class="card clickable" id="outOfStockCard"><div class="card-header"><div class="card-title">Produk Habis</div><i class="fas fa-exclamation-circle"></i></div><div class="card-value" id="outOfStock">0</div><div class="card-footer">Klik untuk lihat</div></div>
+            </div>
+            <div class="card" style="margin-top: var(--spacing);"><div class="card-header"><div class="card-title">Grafik Penjualan 7 Hari Terakhir</div></div><div style="height: 300px; padding: var(--spacing);"><canvas id="salesChart"></canvas></div></div>
+        </div>
+
+        <!-- Other Pages (Cashier, Products, Settings) -->
+        <div class="page" id="cashier">
+            <h2>Kasir</h2>
+            <div class="cashier-container">
+                <div class="product-section">
+                    <div class="search-container">
+                        <input type="text" class="search-input" id="productSearch" placeholder="Cari atau scan barcode...">
+                    </div>
+                    <div class="product-list" id="productList"></div>
+                </div>
+                <div class="cart-section">
+                    <div class="cart-container">
+                        <h3>Keranjang Belanja</h3>
+                        <div class="cart-items" id="cartItems"><div class="empty-cart"><i class="fas fa-shopping-cart"></i><p>Keranjang kosong</p></div></div>
+                        <div class="cart-total" id="cartTotal" style="display: none;"><div class="total-row"><span class="total-label">Subtotal</span><span class="total-value" id="subtotal">Rp 0</span></div><div class="total-row"><span class="total-label">Diskon</span><span class="total-value" id="discount">Rp 0</span></div><div class="total-row grand-total"><span class="total-label">Total</span><span class="total-value" id="grandTotal">Rp 0</span></div></div>
+                        <button class="payment-btn" id="paymentBtn" disabled>Proses Pembayaran</button>
+                        <button class="reset-btn" id="resetBtn">Reset Keranjang</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page" id="products">
+            <div class="products-header">
+                <h2>Manajemen Produk</h2>
+                <button class="add-product-btn" id="addProductBtn"><i class="fas fa-plus"></i><span>Tambah Produk</span></button>
+            </div>
+            <div class="table-container">
+                <table class="products-table">
+                    <thead><tr><th>Barcode</th><th>Nama Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead>
+                    <tbody id="productsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="page" id="settings">
+            <h2>Pengaturan Toko</h2>
+            <div class="settings-grid">
+                <div class="settings-card" data-setting="profile"><i class="fas fa-store"></i><h3>Profil Toko</h3><p>Ubah nama toko, alamat, kontak, dan logo</p></div>
+                <div class="settings-card" data-setting="receipt"><i class="fas fa-receipt"></i><h3>Struk Pembelian</h3><p>Custom header, footer, dan informasi struk</p></div>
+                <div class="settings-card" data-setting="backup"><i class="fas fa-database"></i><h3>Backup & Restore</h3><p>Backup data toko atau restore dari backup</p></div>
+                <div class="settings-card" data-setting="barcode"><i class="fas fa-barcode"></i><h3>Generate Barcode</h3><p>Buat barcode untuk produk baru</p></div>
+                <div class="settings-card" data-setting="theme"><i class="fas fa-palette"></i><h3>Tema & Tampilan</h3><p>Ubah warna dan tampilan aplikasi</p></div>
+            </div>
+             <div class="card" style="margin-top: var(--spacing);">
+                <div class="card-header"><div class="card-title">Informasi Pengguna</div></div>
+                 <div style="padding: var(--spacing);">
+                    <p><strong>App ID:</strong> <span id="appIdDisplay"></span></p>
+                    <p><strong>User ID:</strong> <span id="userIdDisplay"></span></p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Windows -->
+    <div class="modal" id="restockModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Produk Perlu Restok</h3>
+            <div class="restock-list" id="restockList">
+                <!-- Restock items will be dynamically added here -->
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal" id="productModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3 id="productModalTitle">Tambah Produk Baru</h3>
+            <form id="productForm">
+                <div class="form-group">
+                    <label class="form-label">Barcode</label>
+                    <div style="display: flex; gap: var(--spacing-half);">
+                        <input type="text" class="form-control" id="productBarcode" placeholder="Kode barcode" required>
+                        <button type="button" class="btn btn-secondary" id="generateBarcodeBtn"><i class="fas fa-random"></i></button>
+                        <button type="button" class="btn btn-secondary" id="scanBarcodeBtn"><i class="fas fa-barcode"></i></button>
+                    </div>
+                </div>
+                <div class="form-group"><label class="form-label">Nama Produk</label><input type="text" class="form-control" id="productName" placeholder="Nama produk" required></div>
+                <div class="form-group"><label class="form-label">Kategori</label><select class="form-control" id="productCategory" required><option value="">Pilih kategori</option><option value="Sembako">Sembako</option><option value="Minuman">Minuman</option><option value="Snack">Snack</option><option value="Perlengkapan">Perlengkapan</option><option value="Lainnya">Lainnya</option></select></div>
+                <div class="form-group"><label class="form-label">Harga Beli</label><input type="number" class="form-control" id="productBuyPrice" placeholder="Harga beli" min="0" required></div>
+                <div class="form-group"><label class="form-label">Harga Jual</label><input type="number" class="form-control" id="productSellPrice" placeholder="Harga jual" min="0" required></div>
+                <div class="form-group"><label class="form-label">Stok Awal</label><input type="number" class="form-control" id="productStock" placeholder="Jumlah stok" min="0" required></div>
+                <div class="form-group"><label class="form-label">Gambar Produk</label><input type="file" class="form-control" id="productImage" accept="image/*"><div id="productImagePreview" style="margin-top: var(--spacing-half);"></div></div>
+                <div class="form-actions"><button type="button" class="btn btn-secondary close-modal-btn">Batal</button><button type="submit" class="btn btn-primary">Simpan Produk</button></div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="modal" id="barcodeScannerModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Scan Barcode</h3>
+            <div id="reader" style="width:100%; margin: 1rem 0;"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="paymentModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span><h3>Pembayaran</h3>
+            <div class="form-group"><label class="form-label">Total Pembayaran</label><input type="text" class="form-control" id="paymentTotal" readonly></div>
+            <div class="form-group"><label class="form-label">Dibayar</label><input type="number" class="form-control" id="paymentAmount" placeholder="Masukkan jumlah pembayaran" min="0"></div>
+            <div class="form-group"><label class="form-label">Kembalian</label><input type="text" class="form-control" id="paymentChange" readonly value="Rp 0"></div>
+            <button class="btn btn-primary" id="confirmPayment" style="width: 100%;">Konfirmasi Pembayaran</button>
+        </div>
+    </div>
+
+    <div class="modal" id="receiptModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span><h3>Struk Pembayaran</h3>
+            <div class="receipt" id="receiptPrint">
+                <div class="receipt-header"><img src="" alt="Logo Toko" class="receipt-logo" id="receiptLogo"><div class="receipt-title" id="receiptStoreName"></div><div class="receipt-address" id="receiptStoreAddress"></div><div class="receipt-address" id="receiptStorePhone"></div><div class="receipt-date" id="receiptDate"></div></div>
+                <div class="receipt-items" id="receiptItems"></div><div class="receipt-total" id="receiptTotal"></div><div class="receipt-footer" id="receiptFooter"></div>
+            </div>
+            <div style="display: flex; gap: var(--spacing); margin-top: var(--spacing-double);"><button class="btn btn-secondary" id="printReceipt"><i class="fas fa-print"></i> Cetak</button><button class="btn btn-primary close-modal-btn" style="flex: 1;">Tutup</button></div>
+        </div>
+    </div>
+    
+    <div class="modal" id="storeProfileModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span><h3>Profil Toko</h3>
+            <form id="storeProfileForm">
+                <div class="form-group"><label class="form-label">Nama Toko</label><input type="text" class="form-control" id="storeNameInput" placeholder="Nama toko" required></div>
+                <div class="form-group"><label class="form-label">Tagline/Slogan</label><input type="text" class="form-control" id="storeTaglineInput" placeholder="Slogan toko"></div>
+                <div class="form-group"><label class="form-label">Alamat</label><textarea class="form-control" id="storeAddressInput" placeholder="Alamat toko" required></textarea></div>
+                <div class="form-group"><label class="form-label">Nomor Telepon</label><input type="text" class="form-control" id="storePhoneInput" placeholder="Nomor telepon"></div>
+                <div class="form-group"><label class="form-label">Logo Toko</label><input type="file" class="form-control" id="storeLogoInput" accept="image/*"><div id="storeLogoPreview" style="margin-top: var(--spacing-half);"></div></div>
+                <div class="form-actions"><button type="button" class="btn btn-secondary close-modal-btn">Batal</button><button type="submit" class="btn btn-primary">Simpan Perubahan</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="receiptSettingsModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span><h3>Pengaturan Struk</h3>
+            <form id="receiptSettingsForm">
+                <div class="form-group"><label class="form-label">Footer Struk</label><textarea class="form-control" id="receiptFooterInput" placeholder="Teks footer struk"></textarea></div>
+                <div class="form-group"><label class="form-label">Tampilkan Logo pada Struk</label><select class="form-control" id="receiptShowLogo"><option value="yes">Ya</option><option value="no">Tidak</option></select></div>
+                <div class="form-actions"><button type="button" class="btn btn-secondary close-modal-btn">Batal</button><button type="submit" class="btn btn-primary">Simpan Pengaturan</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="backupModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span><h3>Backup & Restore Data</h3>
+            <h4>Backup Data</h4><p>Unduh file backup berisi semua data toko Anda.</p><button class="btn btn-primary" id="createBackupBtn"><i class="fas fa-download"></i> Buat Backup</button>
+            <h4 style="margin-top: var(--spacing-double);">Restore Data</h4><p>Upload file backup untuk mengembalikan data toko Anda.</p>
+            <div class="form-group"><label class="form-label">File Backup</label><input type="file" class="form-control" id="restoreFileInput" accept=".json"></div>
+            <button class="btn btn-danger" id="restoreBackupBtn" style="margin-top: var(--spacing);"><i class="fas fa-upload"></i> Restore Backup</button>
+            <div class="form-actions" style="margin-top: var(--spacing-double);"><button type="button" class="btn btn-secondary close-modal-btn">Tutup</button></div>
+        </div>
+    </div>
+
+    <div class="modal" id="barcodeGeneratorModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span><h3>Generate Barcode</h3>
+            <div class="form-group"><label class="form-label">Kode Barcode</label><input type="text" class="form-control" id="barcodeCodeInput" placeholder="Masukkan kode barcode"></div>
+            <div class="form-group"><label class="form-label">Format</label><select class="form-control" id="barcodeFormatInput"><option value="CODE128">CODE128</option><option value="EAN13">EAN-13</option><option value="UPC">UPC</option><option value="ITF14">ITF-14</option></select></div>
+            <div class="barcode-preview" id="barcodePreview"><svg id="barcodeSvg"></svg></div>
+            <button class="btn btn-primary" id="downloadBarcodeBtn" style="width: 100%; margin-top: var(--spacing);"><i class="fas fa-download"></i> Unduh Barcode</button>
+        </div>
+    </div>
+
+    <div class="modal" id="themeModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span><h3>Tema & Tampilan</h3>
+            <div class="form-group">
+                <label class="form-label">Pilih Tema</label>
+                <div class="theme-options" id="themeOptions">
+                    <div class="theme-option" data-theme="default"><div class="theme-preview" style="background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);"></div><div>Hijau Standar</div></div>
+                    <div class="theme-option" data-theme="blue"><div class="theme-preview" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);"></div><div>Biru</div></div>
+                    <div class="theme-option" data-theme="purple"><div class="theme-preview" style="background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);"></div><div>Ungu</div></div>
+                    <div class="theme-option" data-theme="red"><div class="theme-preview" style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);"></div><div>Merah</div></div>
+                    <div class="theme-option" data-theme="orange"><div class="theme-preview" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);"></div><div>Oranye</div></div>
+                    <div class="theme-option" data-theme="dark"><div class="theme-preview" style="background: linear-gradient(135deg, #607D8B 0%, #455A64 100%);"></div><div>Abu-abu</div></div>
+                </div>
+            </div>
+            <div class="form-actions" style="margin-top: var(--spacing-double);"><button type="button" class="btn btn-primary" id="applyTheme">Terapkan Tema</button></div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK & App Logic -->
+    <script type="module" src="script.js"></script>
+</body>
+</html>
+
