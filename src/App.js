@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { db, supabase } from './db';
 import Navbar from './components/Navbar';
 import ProductFormModal from './components/ProductFormModal';
 import TransactionDetailModal from './components/TransactionDetailModal';
+import PaymentModal from './components/PaymentModal';
 import POSView from './views/POSView';
 import TransactionsView from './views/TransactionsView';
 import ProductManagementView from './views/ProductManagementView';
+import ReportsView from './views/ReportsView';
+import DebugInfoPanel from './components/DebugInfoPanel';
 
-exportexport default function App() {
+export default function App() {
   // --- STATE ---
   const [cart, setCart] = useState([]);
   const [syncStatus, setSyncStatus] = useState('Idle');
@@ -18,38 +21,41 @@ exportexport default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingTransaction, setViewingTransaction] = useState(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   // --- DATA DARI INDEXEDDB ---
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), []);
   const transactions = useLiveQuery(() => db.transactions.orderBy('transaction_time').reverse().toArray(), []);
+  const transactionItems = useLiveQuery(() => db.transaction_items.toArray(), []);
 
   // --- LOGIKA SINKRONISASI (DIPERBARUI) ---
   const syncFromSupabase = useCallback(async () => {
     try {
       setSyncStatus('Syncing from cloud...');
       
-      // Sinkronisasi Produk
       const { data: prods, error: pErr } = await supabase.from('products').select('*');
       if (pErr) throw pErr;
-      if (prods) await db.products.bulkPut(prods);
 
-      // Sinkronisasi Transaksi
       const { data: txs, error: tErr } = await supabase.from('transactions').select('*');
       if (tErr) throw tErr;
-      if (txs) {
-        // --- PERBAIKAN DI SINI ---
-        // Tandai semua transaksi dari server sebagai 'synced: 1' sebelum disimpan
-        const syncedTxs = txs.map(tx => ({ ...tx, synced: 1 }));
-        await db.transactions.bulkPut(syncedTxs);
-      }
 
-      // Sinkronisasi Item Transaksi
       const { data: items, error: iErr } = await supabase.from('transaction_items').select('*');
       if (iErr) throw iErr;
-      if (items) await db.transaction_items.bulkPut(items);
+
+      // --- PERBAIKAN DI SINI: Gunakan transaksi Dexie untuk memastikan konsistensi data ---
+      await db.transaction('rw', db.products, db.transactions, db.transaction_items, async () => {
+        if (prods) await db.products.bulkPut(prods);
+        
+        if (txs) {
+          const syncedTxs = txs.map(tx => ({ ...tx, synced: 1 }));
+          await db.transactions.bulkPut(syncedTxs);
+        }
+        
+        if (items) await db.transaction_items.bulkPut(items);
+      });
       
       setSyncStatus('Synced');
-      console.log('Sync from cloud complete.');
+      console.log('Atomic sync from cloud complete.');
     } catch (error) {
       setSyncStatus('Offline (Sync Error)');
       console.error('Sync from Supabase error:', error.message);
@@ -95,27 +101,21 @@ exportexport default function App() {
     return () => clearInterval(intervalId);
   }, [syncFromSupabase, syncToSupabase]);
 
-  // --- LOGIKA CHECKOUT ---
-  const handleCheckout = async () => {
+  // --- LOGIKA PEMBAYARAN ---
+  const handleInitiateCheckout = () => {
+    if (cart.length > 0) {
+      setIsPaymentModalOpen(true);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
     if (cart.length === 0) return;
     
     const transactionId = crypto.randomUUID();
     const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-    const newTransaction = {
-      id: transactionId,
-      total_amount: totalAmount,
-      transaction_time: new Date().toISOString(),
-      synced: 0
-    };
-
-    const newTransactionItems = cart.map(item => ({
-      id: crypto.randomUUID(),
-      transaction_id: transactionId,
-      product_id: item.id,
-      quantity: item.quantity,
-      price_at_transaction: item.price
-    }));
+    const newTransaction = { id: transactionId, total_amount: totalAmount, transaction_time: new Date().toISOString(), synced: 0 };
+    const newTransactionItems = cart.map(item => ({ id: crypto.randomUUID(), transaction_id: transactionId, product_id: item.id, quantity: item.quantity, price_at_transaction: item.price }));
 
     try {
       await db.transaction('rw', db.transactions, db.transaction_items, db.products, async () => {
@@ -127,6 +127,7 @@ exportexport default function App() {
       });
       console.log('Transaction saved locally.');
       setCart([]);
+      setIsPaymentModalOpen(false);
       await syncToSupabase();
     } catch (error) {
       console.error('Checkout failed:', error);
@@ -134,7 +135,7 @@ exportexport default function App() {
     }
   };
   
-  // --- LOGIKA DETAIL TRANSAKSI ---
+  // --- FUNGSI LAINNYA ---
   const handleViewTransactionDetails = async (transaction) => {
     try {
       const items = await db.transaction_items.where('transaction_id').equals(transaction.id).toArray();
@@ -148,10 +149,7 @@ exportexport default function App() {
       alert("Tidak bisa memuat detail transaksi.");
     }
   };
-
   const handleCloseTransactionDetails = () => { setViewingTransaction(null); };
-
-  // --- FUNGSI LAINNYA ---
   const addToCart = (product) => {
     setCart(currentCart => {
       const existingItem = currentCart.find(item => item.id === product.id);
@@ -209,18 +207,76 @@ exportexport default function App() {
     setSelectedProduct(null);
   };
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const reportData = useMemo(() => {
+    if (!transactions || !transactionItems || !products) {
+      return { stats: null, topProducts: [] };
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todaysTransactions = transactions.filter(tx => new Date(tx.transaction_time) >= todayStart);
+    const todaysTransactionIds = todaysTransactions.map(tx => tx.id);
+
+    const totalRevenue = todaysTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
+    const transactionCount = todaysTransactions.length;
+
+    const productSales = {};
+    const todaysItems = transactionItems.filter(item => todaysTransactionIds.includes(item.transaction_id));
+    
+    todaysItems.forEach(item => {
+      productSales[item.product_id] = (productSales[item.product_id] || 0) + item.quantity;
+    });
+
+    const topProducts = Object.entries(productSales)
+      .map(([productId, quantity]) => {
+        const product = products.find(p => p.id === productId);
+        return {
+          id: productId,
+          name: product ? product.name : 'Produk Tidak Dikenal',
+          quantity
+        };
+      })
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    return {
+      stats: { totalRevenue, transactionCount },
+      topProducts
+    };
+  }, [transactions, transactionItems, products]);
 
   // --- RENDER ---
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
       <Navbar currentView={currentView} setCurrentView={setCurrentView} />
+      
       <main className="flex-1 flex gap-4 p-4">
-        {currentView === 'pos' && ( <POSView {...{products, cart, addToCart, updateQuantity, total, handleCheckout, syncStatus, searchTerm, setSearchTerm}} /> )}
+        {currentView === 'pos' && ( 
+          <POSView 
+            {...{products, cart, addToCart, updateQuantity, total, syncStatus, searchTerm, setSearchTerm}} 
+            onInitiateCheckout={handleInitiateCheckout}
+          /> 
+        )}
         {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
         {currentView === 'products' && ( <ProductManagementView {...{products, onAdd: () => openModal(), onEdit: openModal, onDelete: handleDeleteProduct}} /> )}
+        {currentView === 'reports' && (
+          <ReportsView stats={reportData.stats} topProducts={reportData.topProducts} />
+        )}
       </main>
+      
       {isModalOpen && ( <ProductFormModal product={selectedProduct} onSave={handleSaveProduct} onClose={closeModal} /> )}
+      
       {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
+
+      {isPaymentModalOpen && (
+        <PaymentModal 
+          total={total}
+          onConfirm={handleConfirmPayment}
+          onClose={() => setIsPaymentModalOpen(false)}
+        />
+      )}
+      <DebugInfoPanel status={syncStatus} />
     </div>
   );
 }
