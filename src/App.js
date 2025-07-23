@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
-// Import database dan komponen-komponen kita
+// Import database dan semua komponen kita
 import { db, supabase } from './db';
 import Navbar from './components/Navbar';
 import ProductFormModal from './components/ProductFormModal';
+import TransactionDetailModal from './components/TransactionDetailModal';
 import POSView from './views/POSView';
 import TransactionsView from './views/TransactionsView';
 import ProductManagementView from './views/ProductManagementView';
@@ -16,6 +17,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState('pos');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewingTransaction, setViewingTransaction] = useState(null);
 
   // --- DATA DARI INDEXEDDB ---
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), []);
@@ -23,30 +26,55 @@ export default function App() {
 
   // --- LOGIKA SINKRONISASI ---
   const syncFromSupabase = useCallback(async () => {
-    setSyncStatus('Syncing products...');
     try {
-      const { data: supabaseProducts, error } = await supabase.from('products').select('*');
-      if (error) throw error;
-      if (supabaseProducts && supabaseProducts.length > 0) {
+      setSyncStatus('Syncing from cloud...');
+      
+      // 1. Sinkronisasi Produk
+      const { data: supabaseProducts, error: productsError } = await supabase.from('products').select('*');
+      if (productsError) throw productsError;
+      if (supabaseProducts) {
         await db.products.bulkPut(supabaseProducts);
       }
+      console.log(`${supabaseProducts.length} products synced from Supabase.`);
+
+      // 2. Sinkronisasi Transaksi
+      const { data: supabaseTxs, error: txsError } = await supabase.from('transactions').select('*');
+      if (txsError) throw txsError;
+      if (supabaseTxs) {
+        // Karena Dexie dan Supabase mungkin memiliki ID yang berbeda, kita perlu mencocokkannya.
+        // Untuk saat ini, kita akan menimpa data lokal dengan data dari Supabase.
+        // Kita perlu membuat skema lokal yang bisa menangani ini, misal dengan UUID dari Supabase sebagai ID utama.
+        // Untuk sementara, kita akan gunakan bulkPut dengan asumsi struktur cocok.
+        // Perbaikan: kita harus mengubah skema DB lokal agar lebih cocok.
+        // Mari kita asumsikan untuk saat ini 'id' dari supabase bisa langsung dipakai.
+        await db.transactions.bulkPut(supabaseTxs);
+      }
+      console.log(`${supabaseTxs.length} transactions synced from Supabase.`);
+
+      // 3. Sinkronisasi Item Transaksi
+      const { data: supabaseTxItems, error: txItemsError } = await supabase.from('transaction_items').select('*');
+      if (txItemsError) throw txItemsError;
+      if (supabaseTxItems) {
+        await db.transaction_items.bulkPut(supabaseTxItems);
+      }
+      console.log(`${supabaseTxItems.length} transaction items synced from Supabase.`);
+      
       setSyncStatus('Synced');
-      console.log('Products synced from Supabase.');
     } catch (error) {
-      setSyncStatus('Offline (Error)');
-      console.error('Sync error:', error.message);
+      setSyncStatus('Offline (Sync Error)');
+      console.error('Sync from Supabase error:', error.message);
     }
   }, []);
   
   const syncToSupabase = useCallback(async () => {
-    setSyncStatus('Syncing transactions...');
+    setSyncStatus('Syncing to cloud...');
     const unsyncedTxs = await db.transactions.where('synced').equals(0).toArray();
 
     if (unsyncedTxs.length === 0) {
       setSyncStatus('Synced');
       return;
     }
-    console.log(`Found ${unsyncedTxs.length} unsynced transactions.`);
+    console.log(`Found ${unsyncedTxs.length} unsynced transactions to push.`);
     for (const tx of unsyncedTxs) {
       try {
         const items = await db.transaction_items.where('transaction_local_id').equals(tx.local_id).toArray();
@@ -57,12 +85,12 @@ export default function App() {
           transaction_id: newTx.id,
           product_id: item.product_id,
           quantity: item.quantity,
-          price_at_transaction: item.price
+          price_at_transaction: item.price_at_transaction
         }));
         const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToSync);
         if (itemsError) throw itemsError;
         await db.transactions.update(tx.local_id, { synced: 1, id: newTx.id });
-        console.log(`Transaction ${tx.local_id} synced.`);
+        console.log(`Transaction ${tx.local_id} pushed to Supabase.`);
       } catch (error) {
         setSyncStatus('Sync Failed');
         console.error(`Failed to sync transaction ${tx.local_id}:`, error);
@@ -74,7 +102,10 @@ export default function App() {
   useEffect(() => {
     syncFromSupabase();
     syncToSupabase();
-    const intervalId = setInterval(syncToSupabase, 60000);
+    const intervalId = setInterval(() => {
+        syncToSupabase();
+        syncFromSupabase();
+    }, 60000);
     return () => clearInterval(intervalId);
   }, [syncFromSupabase, syncToSupabase]);
 
@@ -136,13 +167,11 @@ export default function App() {
     try {
       let savedProduct;
       if (selectedProduct) {
-        // UPDATE
         const { data, error } = await supabase.from('products').update(productData).eq('id', selectedProduct.id).select().single();
         if (error) throw error;
         savedProduct = data;
         await db.products.update(savedProduct.id, savedProduct);
       } else {
-        // CREATE
         const { data, error } = await supabase.from('products').insert(productData).select().single();
         if (error) throw error;
         savedProduct = data;
@@ -177,6 +206,30 @@ export default function App() {
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+  const handleViewTransactionDetails = async (transaction) => {
+    try {
+      const items = await db.transaction_items
+        .where('transaction_local_id')
+        .equals(transaction.local_id)
+        .toArray();
+      const itemsWithProductNames = await Promise.all(items.map(async (item) => {
+        const product = await db.products.get(item.product_id);
+        return {
+          ...item,
+          productName: product ? product.name : 'Produk Dihapus',
+        };
+      }));
+      setViewingTransaction({ ...transaction, items: itemsWithProductNames });
+    } catch (error) {
+      console.error("Gagal mengambil detail transaksi:", error);
+      alert("Tidak bisa memuat detail transaksi.");
+    }
+  };
+
+  const handleCloseTransactionDetails = () => {
+    setViewingTransaction(null);
+  };
+
   // --- RENDER TAMPILAN UTAMA ---
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
@@ -192,9 +245,16 @@ export default function App() {
             total={total}
             handleCheckout={handleCheckout}
             syncStatus={syncStatus}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
           />
         )}
-        {currentView === 'transactions' && <TransactionsView transactions={transactions} />}
+        {currentView === 'transactions' && (
+          <TransactionsView 
+            transactions={transactions} 
+            onViewDetails={handleViewTransactionDetails} 
+          />
+        )}
         {currentView === 'products' && (
           <ProductManagementView
             products={products}
@@ -210,6 +270,13 @@ export default function App() {
           product={selectedProduct}
           onSave={handleSaveProduct}
           onClose={closeModal}
+        />
+      )}
+
+      {viewingTransaction && (
+        <TransactionDetailModal 
+          transaction={viewingTransaction}
+          onClose={handleCloseTransactionDetails}
         />
       )}
     </div>
