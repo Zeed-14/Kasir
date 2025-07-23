@@ -9,7 +9,7 @@ import POSView from './views/POSView';
 import TransactionsView from './views/TransactionsView';
 import ProductManagementView from './views/ProductManagementView';
 
-export default function App() {
+exportexport default function App() {
   // --- STATE ---
   const [cart, setCart] = useState([]);
   const [syncStatus, setSyncStatus] = useState('Idle');
@@ -27,14 +27,23 @@ export default function App() {
   const syncFromSupabase = useCallback(async () => {
     try {
       setSyncStatus('Syncing from cloud...');
+      
+      // Sinkronisasi Produk
       const { data: prods, error: pErr } = await supabase.from('products').select('*');
       if (pErr) throw pErr;
       if (prods) await db.products.bulkPut(prods);
 
+      // Sinkronisasi Transaksi
       const { data: txs, error: tErr } = await supabase.from('transactions').select('*');
       if (tErr) throw tErr;
-      if (txs) await db.transactions.bulkPut(txs);
+      if (txs) {
+        // --- PERBAIKAN DI SINI ---
+        // Tandai semua transaksi dari server sebagai 'synced: 1' sebelum disimpan
+        const syncedTxs = txs.map(tx => ({ ...tx, synced: 1 }));
+        await db.transactions.bulkPut(syncedTxs);
+      }
 
+      // Sinkronisasi Item Transaksi
       const { data: items, error: iErr } = await supabase.from('transaction_items').select('*');
       if (iErr) throw iErr;
       if (items) await db.transaction_items.bulkPut(items);
@@ -58,9 +67,8 @@ export default function App() {
     for (const tx of unsyncedTxs) {
       try {
         const items = await db.transaction_items.where('transaction_id').equals(tx.id).toArray();
-        const { synced, ...txToSync } = tx; // Hapus status 'synced' sebelum upload
+        const { synced, ...txToSync } = tx;
         
-        // Gunakan 'upsert' untuk menghindari duplikasi di server
         const { error: txError } = await supabase.from('transactions').upsert(txToSync);
         if (txError) throw txError;
         
@@ -68,7 +76,7 @@ export default function App() {
         if (itemsError) throw itemsError;
 
         await db.transactions.update(tx.id, { synced: 1 });
-        console.log(`Transaction ${tx.id} pushed.`);
+        console.log(`Transaction ${tx.id} pushed and marked as synced.`);
       } catch (error) {
         setSyncStatus('Sync Failed');
         console.error(`Failed to sync transaction ${tx.id}:`, error);
@@ -87,11 +95,10 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [syncFromSupabase, syncToSupabase]);
 
-  // --- LOGIKA CHECKOUT (DIPERBARUI) ---
+  // --- LOGIKA CHECKOUT ---
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     
-    // 1. Buat ID unik di client
     const transactionId = crypto.randomUUID();
     const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -99,11 +106,11 @@ export default function App() {
       id: transactionId,
       total_amount: totalAmount,
       transaction_time: new Date().toISOString(),
-      synced: 0 // Tandai sebagai belum di-sync
+      synced: 0
     };
 
     const newTransactionItems = cart.map(item => ({
-      id: crypto.randomUUID(), // Setiap item juga butuh ID unik
+      id: crypto.randomUUID(),
       transaction_id: transactionId,
       product_id: item.id,
       quantity: item.quantity,
@@ -111,7 +118,6 @@ export default function App() {
     }));
 
     try {
-      // Simpan semuanya ke database lokal
       await db.transaction('rw', db.transactions, db.transaction_items, db.products, async () => {
         await db.transactions.add(newTransaction);
         await db.transaction_items.bulkAdd(newTransactionItems);
@@ -121,14 +127,14 @@ export default function App() {
       });
       console.log('Transaction saved locally.');
       setCart([]);
-      await syncToSupabase(); // Langsung coba sync
+      await syncToSupabase();
     } catch (error) {
       console.error('Checkout failed:', error);
       alert('Gagal menyimpan transaksi lokal.');
     }
   };
   
-  // --- LOGIKA DETAIL TRANSAKSI (DIPERBARUI) ---
+  // --- LOGIKA DETAIL TRANSAKSI ---
   const handleViewTransactionDetails = async (transaction) => {
     try {
       const items = await db.transaction_items.where('transaction_id').equals(transaction.id).toArray();
@@ -145,7 +151,7 @@ export default function App() {
 
   const handleCloseTransactionDetails = () => { setViewingTransaction(null); };
 
-  // --- FUNGSI LAINNYA (Tidak Berubah) ---
+  // --- FUNGSI LAINNYA ---
   const addToCart = (product) => {
     setCart(currentCart => {
       const existingItem = currentCart.find(item => item.id === product.id);
@@ -157,7 +163,6 @@ export default function App() {
       return [...currentCart, { ...product, quantity: 1 }];
     });
   };
-
   const updateQuantity = (productId, amount) => {
     setCart(currentCart => {
       const updatedCart = currentCart.map(item =>
@@ -166,7 +171,6 @@ export default function App() {
       return updatedCart.filter(item => item.quantity > 0);
     });
   };
-  
   const handleSaveProduct = async (productData) => {
     try {
       let savedProduct;
@@ -186,7 +190,6 @@ export default function App() {
       alert(`Error: ${error.message}`);
     }
   };
-
   const handleDeleteProduct = async (productId) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus produk ini?')) {
       try {
@@ -197,17 +200,14 @@ export default function App() {
       }
     }
   };
-
   const openModal = (product = null) => {
     setSelectedProduct(product);
     setIsModalOpen(true);
   };
-
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedProduct(null);
   };
-
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // --- RENDER ---
