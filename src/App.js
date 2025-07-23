@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
-// Import database dan semua komponen kita
 import { db, supabase } from './db';
 import Navbar from './components/Navbar';
 import ProductFormModal from './components/ProductFormModal';
@@ -11,7 +10,7 @@ import TransactionsView from './views/TransactionsView';
 import ProductManagementView from './views/ProductManagementView';
 
 export default function App() {
-  // --- STATE UTAMA APLIKASI ---
+  // --- STATE ---
   const [cart, setCart] = useState([]);
   const [syncStatus, setSyncStatus] = useState('Idle');
   const [currentView, setCurrentView] = useState('pos');
@@ -24,42 +23,24 @@ export default function App() {
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), []);
   const transactions = useLiveQuery(() => db.transactions.orderBy('transaction_time').reverse().toArray(), []);
 
-  // --- LOGIKA SINKRONISASI ---
+  // --- LOGIKA SINKRONISASI (DIPERBARUI) ---
   const syncFromSupabase = useCallback(async () => {
     try {
       setSyncStatus('Syncing from cloud...');
-      
-      // 1. Sinkronisasi Produk
-      const { data: supabaseProducts, error: productsError } = await supabase.from('products').select('*');
-      if (productsError) throw productsError;
-      if (supabaseProducts) {
-        await db.products.bulkPut(supabaseProducts);
-      }
-      console.log(`${supabaseProducts.length} products synced from Supabase.`);
+      const { data: prods, error: pErr } = await supabase.from('products').select('*');
+      if (pErr) throw pErr;
+      if (prods) await db.products.bulkPut(prods);
 
-      // 2. Sinkronisasi Transaksi
-      const { data: supabaseTxs, error: txsError } = await supabase.from('transactions').select('*');
-      if (txsError) throw txsError;
-      if (supabaseTxs) {
-        // Karena Dexie dan Supabase mungkin memiliki ID yang berbeda, kita perlu mencocokkannya.
-        // Untuk saat ini, kita akan menimpa data lokal dengan data dari Supabase.
-        // Kita perlu membuat skema lokal yang bisa menangani ini, misal dengan UUID dari Supabase sebagai ID utama.
-        // Untuk sementara, kita akan gunakan bulkPut dengan asumsi struktur cocok.
-        // Perbaikan: kita harus mengubah skema DB lokal agar lebih cocok.
-        // Mari kita asumsikan untuk saat ini 'id' dari supabase bisa langsung dipakai.
-        await db.transactions.bulkPut(supabaseTxs);
-      }
-      console.log(`${supabaseTxs.length} transactions synced from Supabase.`);
+      const { data: txs, error: tErr } = await supabase.from('transactions').select('*');
+      if (tErr) throw tErr;
+      if (txs) await db.transactions.bulkPut(txs);
 
-      // 3. Sinkronisasi Item Transaksi
-      const { data: supabaseTxItems, error: txItemsError } = await supabase.from('transaction_items').select('*');
-      if (txItemsError) throw txItemsError;
-      if (supabaseTxItems) {
-        await db.transaction_items.bulkPut(supabaseTxItems);
-      }
-      console.log(`${supabaseTxItems.length} transaction items synced from Supabase.`);
+      const { data: items, error: iErr } = await supabase.from('transaction_items').select('*');
+      if (iErr) throw iErr;
+      if (items) await db.transaction_items.bulkPut(items);
       
       setSyncStatus('Synced');
+      console.log('Sync from cloud complete.');
     } catch (error) {
       setSyncStatus('Offline (Sync Error)');
       console.error('Sync from Supabase error:', error.message);
@@ -69,31 +50,28 @@ export default function App() {
   const syncToSupabase = useCallback(async () => {
     setSyncStatus('Syncing to cloud...');
     const unsyncedTxs = await db.transactions.where('synced').equals(0).toArray();
-
     if (unsyncedTxs.length === 0) {
       setSyncStatus('Synced');
       return;
     }
-    console.log(`Found ${unsyncedTxs.length} unsynced transactions to push.`);
+    console.log(`Pushing ${unsyncedTxs.length} transactions...`);
     for (const tx of unsyncedTxs) {
       try {
-        const items = await db.transaction_items.where('transaction_local_id').equals(tx.local_id).toArray();
-        const { local_id, synced, ...txToSync } = tx;
-        const { data: newTx, error: txError } = await supabase.from('transactions').insert(txToSync).select().single();
+        const items = await db.transaction_items.where('transaction_id').equals(tx.id).toArray();
+        const { synced, ...txToSync } = tx; // Hapus status 'synced' sebelum upload
+        
+        // Gunakan 'upsert' untuk menghindari duplikasi di server
+        const { error: txError } = await supabase.from('transactions').upsert(txToSync);
         if (txError) throw txError;
-        const itemsToSync = items.map(item => ({
-          transaction_id: newTx.id,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          price_at_transaction: item.price_at_transaction
-        }));
-        const { error: itemsError } = await supabase.from('transaction_items').insert(itemsToSync);
+        
+        const { error: itemsError } = await supabase.from('transaction_items').upsert(items);
         if (itemsError) throw itemsError;
-        await db.transactions.update(tx.local_id, { synced: 1, id: newTx.id });
-        console.log(`Transaction ${tx.local_id} pushed to Supabase.`);
+
+        await db.transactions.update(tx.id, { synced: 1 });
+        console.log(`Transaction ${tx.id} pushed.`);
       } catch (error) {
         setSyncStatus('Sync Failed');
-        console.error(`Failed to sync transaction ${tx.local_id}:`, error);
+        console.error(`Failed to sync transaction ${tx.id}:`, error);
       }
     }
     setSyncStatus('Synced');
@@ -109,7 +87,65 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [syncFromSupabase, syncToSupabase]);
 
-  // --- LOGIKA KERANJANG & CHECKOUT ---
+  // --- LOGIKA CHECKOUT (DIPERBARUI) ---
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+    
+    // 1. Buat ID unik di client
+    const transactionId = crypto.randomUUID();
+    const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+    const newTransaction = {
+      id: transactionId,
+      total_amount: totalAmount,
+      transaction_time: new Date().toISOString(),
+      synced: 0 // Tandai sebagai belum di-sync
+    };
+
+    const newTransactionItems = cart.map(item => ({
+      id: crypto.randomUUID(), // Setiap item juga butuh ID unik
+      transaction_id: transactionId,
+      product_id: item.id,
+      quantity: item.quantity,
+      price_at_transaction: item.price
+    }));
+
+    try {
+      // Simpan semuanya ke database lokal
+      await db.transaction('rw', db.transactions, db.transaction_items, db.products, async () => {
+        await db.transactions.add(newTransaction);
+        await db.transaction_items.bulkAdd(newTransactionItems);
+        for (const item of cart) {
+          await db.products.update(item.id, { stock: item.stock - item.quantity });
+        }
+      });
+      console.log('Transaction saved locally.');
+      setCart([]);
+      await syncToSupabase(); // Langsung coba sync
+    } catch (error) {
+      console.error('Checkout failed:', error);
+      alert('Gagal menyimpan transaksi lokal.');
+    }
+  };
+  
+  // --- LOGIKA DETAIL TRANSAKSI (DIPERBARUI) ---
+  const handleViewTransactionDetails = async (transaction) => {
+    try {
+      const items = await db.transaction_items.where('transaction_id').equals(transaction.id).toArray();
+      const itemsWithProductNames = await Promise.all(items.map(async (item) => {
+        const product = await db.products.get(item.product_id);
+        return { ...item, productName: product ? product.name : 'Produk Dihapus' };
+      }));
+      setViewingTransaction({ ...transaction, items: itemsWithProductNames });
+    } catch (error) {
+      console.error("Gagal mengambil detail transaksi:", error);
+      alert("Tidak bisa memuat detail transaksi.");
+    }
+  };
+
+  const handleCloseTransactionDetails = () => { setViewingTransaction(null); };
+
+  // --- FUNGSI LAINNYA (Tidak Berubah) ---
   const addToCart = (product) => {
     setCart(currentCart => {
       const existingItem = currentCart.find(item => item.id === product.id);
@@ -130,39 +166,7 @@ export default function App() {
       return updatedCart.filter(item => item.quantity > 0);
     });
   };
-
-  const handleCheckout = async () => {
-    if (cart.length === 0) return;
-    const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const transactionData = {
-      total_amount: totalAmount,
-      transaction_time: new Date().toISOString(),
-      synced: 0
-    };
-    try {
-      await db.transaction('rw', db.transactions, db.transaction_items, db.products, async () => {
-        const txId = await db.transactions.add(transactionData);
-        const transactionItems = cart.map(item => ({
-          transaction_local_id: txId,
-          product_id: item.id,
-          quantity: item.quantity,
-          price_at_transaction: item.price
-        }));
-        await db.transaction_items.bulkAdd(transactionItems);
-        for (const item of cart) {
-          await db.products.update(item.id, { stock: item.stock - item.quantity });
-        }
-      });
-      console.log('Transaction saved locally.');
-      setCart([]);
-      await syncToSupabase();
-    } catch (error) {
-      console.error('Checkout failed:', error);
-      alert('Gagal menyimpan transaksi secara lokal.');
-    }
-  };
   
-  // --- LOGIKA MANAJEMEN PRODUK (CRUD) ---
   const handleSaveProduct = async (productData) => {
     try {
       let savedProduct;
@@ -194,11 +198,11 @@ export default function App() {
     }
   };
 
-  // --- LOGIKA MODAL ---
   const openModal = (product = null) => {
     setSelectedProduct(product);
     setIsModalOpen(true);
   };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedProduct(null);
@@ -206,79 +210,17 @@ export default function App() {
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const handleViewTransactionDetails = async (transaction) => {
-    try {
-      const items = await db.transaction_items
-        .where('transaction_local_id')
-        .equals(transaction.local_id)
-        .toArray();
-      const itemsWithProductNames = await Promise.all(items.map(async (item) => {
-        const product = await db.products.get(item.product_id);
-        return {
-          ...item,
-          productName: product ? product.name : 'Produk Dihapus',
-        };
-      }));
-      setViewingTransaction({ ...transaction, items: itemsWithProductNames });
-    } catch (error) {
-      console.error("Gagal mengambil detail transaksi:", error);
-      alert("Tidak bisa memuat detail transaksi.");
-    }
-  };
-
-  const handleCloseTransactionDetails = () => {
-    setViewingTransaction(null);
-  };
-
-  // --- RENDER TAMPILAN UTAMA ---
+  // --- RENDER ---
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
       <Navbar currentView={currentView} setCurrentView={setCurrentView} />
-
       <main className="flex-1 flex gap-4 p-4">
-        {currentView === 'pos' && (
-          <POSView
-            products={products}
-            cart={cart}
-            addToCart={addToCart}
-            updateQuantity={updateQuantity}
-            total={total}
-            handleCheckout={handleCheckout}
-            syncStatus={syncStatus}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-          />
-        )}
-        {currentView === 'transactions' && (
-          <TransactionsView 
-            transactions={transactions} 
-            onViewDetails={handleViewTransactionDetails} 
-          />
-        )}
-        {currentView === 'products' && (
-          <ProductManagementView
-            products={products}
-            onAdd={() => openModal()}
-            onEdit={openModal}
-            onDelete={handleDeleteProduct}
-          />
-        )}
+        {currentView === 'pos' && ( <POSView {...{products, cart, addToCart, updateQuantity, total, handleCheckout, syncStatus, searchTerm, setSearchTerm}} /> )}
+        {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
+        {currentView === 'products' && ( <ProductManagementView {...{products, onAdd: () => openModal(), onEdit: openModal, onDelete: handleDeleteProduct}} /> )}
       </main>
-
-      {isModalOpen && (
-        <ProductFormModal
-          product={selectedProduct}
-          onSave={handleSaveProduct}
-          onClose={closeModal}
-        />
-      )}
-
-      {viewingTransaction && (
-        <TransactionDetailModal 
-          transaction={viewingTransaction}
-          onClose={handleCloseTransactionDetails}
-        />
-      )}
+      {isModalOpen && ( <ProductFormModal product={selectedProduct} onSave={handleSaveProduct} onClose={closeModal} /> )}
+      {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
     </div>
   );
 }
