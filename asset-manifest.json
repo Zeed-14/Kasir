@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/kasir/static/css/main.f4a59f49.css",
-    "main.js": "/kasir/static/js/main.93f875f9.js",
+    "main.js": "/kasir/static/js/main.341cdf26.js",
     "static/js/453.83948d10.chunk.js": "/kasir/static/js/453.83948d10.chunk.js",
     "index.html": "/kasir/index.html",
     "main.f4a59f49.css.map": "/kasir/static/css/main.f4a59f49.css.map",
-    "main.93f875f9.js.map": "/kasir/static/js/main.93f875f9.js.map",
+    "main.341cdf26.js.map": "/kasir/static/js/main.341cdf26.js.map",
     "453.83948d10.chunk.js.map": "/kasir/static/js/453.83948d10.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.f4a59f49.css",
-    "static/js/main.93f875f9.js"
+    "static/js/main.341cdf26.js"
   ]
 }
