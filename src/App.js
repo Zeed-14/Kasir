@@ -18,6 +18,7 @@ import SyncProgressModal from './components/SyncProgressModal';
 import DebugConsole from './components/DebugConsole';
 import CategoryManagementView from './views/CategoryManagementView';
 import AuthView from './views/AuthView';
+import InstallPWAButton from './components/InstallPWAButton'; // <-- IMPORT BARU
 
 const CategoryFormModal = ({ category, onSave, onClose }) => {
   const [name, setName] = useState(category?.name || '');
@@ -63,6 +64,8 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [reportPeriod, setReportPeriod] = useState('today');
   const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false);
+  // --- STATE BARU: Untuk menyimpan event instalasi ---
+  const [installPrompt, setInstallPrompt] = useState(null);
 
   // --- EFEK ---
   useEffect(() => {
@@ -79,6 +82,19 @@ export default function App() {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // --- EFEK BARU: Untuk menangkap event instalasi PWA ---
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      console.log('PWA install prompt event captured!');
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   // --- DATA DARI INDEXEDDB ---
@@ -199,42 +215,6 @@ export default function App() {
     return { stats: { totalRevenue, transactionCount }, topProducts, chartData };
   }, [transactions, transactionItems, products, reportPeriod, isInitialSyncComplete]);
 
-  // --- LOGIKA CRUD KATEGORI ---
-  const handleSaveCategory = async (categoryData) => {
-    try {
-      if (selectedCategory) {
-        const { data, error } = await supabase.from('categories').update({ name: categoryData.name }).eq('id', selectedCategory.id).select().single();
-        if (error) throw error;
-        await db.categories.put(data);
-      } else {
-        const { data, error } = await supabase.from('categories').insert({ name: categoryData.name }).select().single();
-        if (error) throw error;
-        await db.categories.put(data);
-      }
-      closeCategoryModal();
-    } catch (error) {
-      alert(`Error: ${error.message}`);
-    }
-  };
-  const handleDeleteCategory = async (categoryId) => {
-    if (window.confirm('Menghapus kategori akan membuat produk terkait menjadi "Tanpa Kategori". Lanjutkan?')) {
-      try {
-        await supabase.from('categories').delete().eq('id', categoryId);
-        await db.categories.delete(categoryId);
-      } catch (error) {
-        alert(`Error: ${error.message}`);
-      }
-    }
-  };
-  const openCategoryModal = (category = null) => {
-    setSelectedCategory(category);
-    setIsCategoryModalOpen(true);
-  };
-  const closeCategoryModal = () => {
-    setIsCategoryModalOpen(false);
-    setSelectedCategory(null);
-  };
-
   // --- FUNGSI-FUNGSI LAINNYA ---
   const handleLogout = async () => { await supabase.auth.signOut(); };
   const handleInitiateCheckout = () => { if (cart.length > 0) setIsPaymentModalOpen(true); };
@@ -331,7 +311,55 @@ export default function App() {
     setIsModalOpen(false);
     setSelectedProduct(null);
   };
+  const handleSaveCategory = async (categoryData) => {
+    try {
+      if (selectedCategory) {
+        const { data, error } = await supabase.from('categories').update({ name: categoryData.name }).eq('id', selectedCategory.id).select().single();
+        if (error) throw error;
+        await db.categories.put(data);
+      } else {
+        const { data, error } = await supabase.from('categories').insert({ name: categoryData.name }).select().single();
+        if (error) throw error;
+        await db.categories.put(data);
+      }
+      closeCategoryModal();
+    } catch (error) {
+      alert(`Error: ${error.message}`);
+    }
+  };
+  const handleDeleteCategory = async (categoryId) => {
+    if (window.confirm('Menghapus kategori akan membuat produk terkait menjadi "Tanpa Kategori". Lanjutkan?')) {
+      try {
+        await supabase.from('categories').delete().eq('id', categoryId);
+        await db.categories.delete(categoryId);
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      }
+    }
+  };
+  const openCategoryModal = (category = null) => {
+    setSelectedCategory(category);
+    setIsCategoryModalOpen(true);
+  };
+  const closeCategoryModal = () => {
+    setIsCategoryModalOpen(false);
+    setSelectedCategory(null);
+  };
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) {
+      return;
+    }
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+    setInstallPrompt(null);
+  };
 
   // --- RENDER ---
   if (!session) {
@@ -380,6 +408,8 @@ export default function App() {
         <DebugInfoPanel status={syncStatus} onManualSync={syncToSupabase} />
       </div>
       {isCategoryModalOpen && ( <CategoryFormModal category={selectedCategory} onSave={handleSaveCategory} onClose={closeCategoryModal} /> )}
+
+      {installPrompt && <InstallPWAButton onInstall={handleInstallClick} />}
     </div>
   );
 }
