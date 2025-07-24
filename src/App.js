@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
+import './utils/logger';
 import { db, supabase } from './db';
-import Navbar from './components/Navbar';
+import Sidebar from './components/Sidebar'; // <-- Nama baru
+import Header from './components/Header'; // <-- Komponen baru
+import BottomNavbar from './components/BottomNavbar'; // <-- Komponen baru
 import ProductFormModal from './components/ProductFormModal';
 import TransactionDetailModal from './components/TransactionDetailModal';
 import PaymentModal from './components/PaymentModal';
@@ -11,6 +14,8 @@ import TransactionsView from './views/TransactionsView';
 import ProductManagementView from './views/ProductManagementView';
 import ReportsView from './views/ReportsView';
 import DebugInfoPanel from './components/DebugInfoPanel';
+import SyncProgressModal from './components/SyncProgressModal';
+import DebugConsole from './components/DebugConsole';
 
 export default function App() {
   // --- STATE ---
@@ -22,38 +27,43 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingTransaction, setViewingTransaction] = useState(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [syncProgress, setSyncProgress] = useState({ active: false, count: 0, total: 0 });
+  const [isConsoleVisible, setIsConsoleVisible] = useState(false);
+
+  // --- STATE BARU UNTUK RESPONSIVE ---
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [isCartVisible, setIsCartVisible] = useState(false);
+
+  // Efek untuk mendeteksi perubahan ukuran layar
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // --- DATA DARI INDEXEDDB ---
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), []);
   const transactions = useLiveQuery(() => db.transactions.orderBy('transaction_time').reverse().toArray(), []);
   const transactionItems = useLiveQuery(() => db.transaction_items.toArray(), []);
 
-  // --- LOGIKA SINKRONISASI (DIPERBARUI) ---
+  // --- LOGIKA SINKRONISASI ---
   const syncFromSupabase = useCallback(async () => {
     try {
       setSyncStatus('Syncing from cloud...');
-      
       const { data: prods, error: pErr } = await supabase.from('products').select('*');
       if (pErr) throw pErr;
-
       const { data: txs, error: tErr } = await supabase.from('transactions').select('*');
       if (tErr) throw tErr;
-
       const { data: items, error: iErr } = await supabase.from('transaction_items').select('*');
       if (iErr) throw iErr;
-
-      // --- PERBAIKAN DI SINI: Gunakan transaksi Dexie untuk memastikan konsistensi data ---
       await db.transaction('rw', db.products, db.transactions, db.transaction_items, async () => {
         if (prods) await db.products.bulkPut(prods);
-        
         if (txs) {
           const syncedTxs = txs.map(tx => ({ ...tx, synced: 1 }));
           await db.transactions.bulkPut(syncedTxs);
         }
-        
         if (items) await db.transaction_items.bulkPut(items);
       });
-      
       setSyncStatus('Synced');
       console.log('Atomic sync from cloud complete.');
     } catch (error) {
@@ -63,32 +73,34 @@ export default function App() {
   }, []);
   
   const syncToSupabase = useCallback(async () => {
-    setSyncStatus('Syncing to cloud...');
     const unsyncedTxs = await db.transactions.where('synced').equals(0).toArray();
     if (unsyncedTxs.length === 0) {
       setSyncStatus('Synced');
       return;
     }
-    console.log(`Pushing ${unsyncedTxs.length} transactions...`);
+    const totalToSync = unsyncedTxs.length;
+    setSyncProgress({ active: true, count: 0, total: totalToSync });
+    setSyncStatus('Syncing to cloud...');
+    let syncedCount = 0;
     for (const tx of unsyncedTxs) {
       try {
         const items = await db.transaction_items.where('transaction_id').equals(tx.id).toArray();
         const { synced, ...txToSync } = tx;
-        
-        const { error: txError } = await supabase.from('transactions').upsert(txToSync);
-        if (txError) throw txError;
-        
-        const { error: itemsError } = await supabase.from('transaction_items').upsert(items);
-        if (itemsError) throw itemsError;
-
+        await supabase.from('transactions').upsert(txToSync);
+        await supabase.from('transaction_items').upsert(items);
         await db.transactions.update(tx.id, { synced: 1 });
-        console.log(`Transaction ${tx.id} pushed and marked as synced.`);
+        syncedCount++;
+        setSyncProgress({ active: true, count: syncedCount, total: totalToSync });
       } catch (error) {
         setSyncStatus('Sync Failed');
         console.error(`Failed to sync transaction ${tx.id}:`, error);
+        break;
       }
     }
-    setSyncStatus('Synced');
+    setTimeout(() => {
+      setSyncProgress({ active: false, count: 0, total: 0 });
+      setSyncStatus('Synced');
+    }, 1000);
   }, []);
 
   useEffect(() => {
@@ -101,22 +113,40 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [syncFromSupabase, syncToSupabase]);
 
-  // --- LOGIKA PEMBAYARAN ---
-  const handleInitiateCheckout = () => {
-    if (cart.length > 0) {
-      setIsPaymentModalOpen(true);
+  // --- LOGIKA KALKULASI LAPORAN ---
+  const reportData = useMemo(() => {
+    if (!transactions || !transactionItems || !products) {
+      return { stats: null, topProducts: [] };
     }
-  };
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todaysTransactions = transactions.filter(tx => new Date(tx.transaction_time) >= todayStart);
+    const todaysTransactionIds = todaysTransactions.map(tx => tx.id);
+    const totalRevenue = todaysTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
+    const transactionCount = todaysTransactions.length;
+    const productSales = {};
+    const todaysItems = transactionItems.filter(item => todaysTransactionIds.includes(item.transaction_id));
+    todaysItems.forEach(item => {
+      productSales[item.product_id] = (productSales[item.product_id] || 0) + item.quantity;
+    });
+    const topProducts = Object.entries(productSales)
+      .map(([productId, quantity]) => {
+        const product = products.find(p => p.id === productId);
+        return { id: productId, name: product ? product.name : 'Produk Tidak Dikenal', quantity };
+      })
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+    return { stats: { totalRevenue, transactionCount }, topProducts };
+  }, [transactions, transactionItems, products]);
 
+  // --- FUNGSI-FUNGSI LAINNYA ---
+  const handleInitiateCheckout = () => { if (cart.length > 0) setIsPaymentModalOpen(true); };
   const handleConfirmPayment = async () => {
     if (cart.length === 0) return;
-    
     const transactionId = crypto.randomUUID();
     const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
     const newTransaction = { id: transactionId, total_amount: totalAmount, transaction_time: new Date().toISOString(), synced: 0 };
     const newTransactionItems = cart.map(item => ({ id: crypto.randomUUID(), transaction_id: transactionId, product_id: item.id, quantity: item.quantity, price_at_transaction: item.price }));
-
     try {
       await db.transaction('rw', db.transactions, db.transaction_items, db.products, async () => {
         await db.transactions.add(newTransaction);
@@ -125,17 +155,15 @@ export default function App() {
           await db.products.update(item.id, { stock: item.stock - item.quantity });
         }
       });
-      console.log('Transaction saved locally.');
       setCart([]);
       setIsPaymentModalOpen(false);
+      setIsCartVisible(false); // Sembunyikan keranjang setelah bayar di mobile
       await syncToSupabase();
     } catch (error) {
       console.error('Checkout failed:', error);
       alert('Gagal menyimpan transaksi lokal.');
     }
   };
-  
-  // --- FUNGSI LAINNYA ---
   const handleViewTransactionDetails = async (transaction) => {
     try {
       const items = await db.transaction_items.where('transaction_id').equals(transaction.id).toArray();
@@ -207,68 +235,37 @@ export default function App() {
     setSelectedProduct(null);
   };
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const reportData = useMemo(() => {
-    if (!transactions || !transactionItems || !products) {
-      return { stats: null, topProducts: [] };
-    }
-
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const todaysTransactions = transactions.filter(tx => new Date(tx.transaction_time) >= todayStart);
-    const todaysTransactionIds = todaysTransactions.map(tx => tx.id);
-
-    const totalRevenue = todaysTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
-    const transactionCount = todaysTransactions.length;
-
-    const productSales = {};
-    const todaysItems = transactionItems.filter(item => todaysTransactionIds.includes(item.transaction_id));
-    
-    todaysItems.forEach(item => {
-      productSales[item.product_id] = (productSales[item.product_id] || 0) + item.quantity;
-    });
-
-    const topProducts = Object.entries(productSales)
-      .map(([productId, quantity]) => {
-        const product = products.find(p => p.id === productId);
-        return {
-          id: productId,
-          name: product ? product.name : 'Produk Tidak Dikenal',
-          quantity
-        };
-      })
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
-
-    return {
-      stats: { totalRevenue, transactionCount },
-      topProducts
-    };
-  }, [transactions, transactionItems, products]);
 
   // --- RENDER ---
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
-      <Navbar currentView={currentView} setCurrentView={setCurrentView} />
-      
-      <main className="flex-1 flex gap-4 p-4">
-        {currentView === 'pos' && ( 
-          <POSView 
-            {...{products, cart, addToCart, updateQuantity, total, syncStatus, searchTerm, setSearchTerm}} 
-            onInitiateCheckout={handleInitiateCheckout}
-          /> 
-        )}
-        {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
-        {currentView === 'products' && ( <ProductManagementView {...{products, onAdd: () => openModal(), onEdit: openModal, onDelete: handleDeleteProduct}} /> )}
-        {currentView === 'reports' && (
-          <ReportsView stats={reportData.stats} topProducts={reportData.topProducts} />
-        )}
-      </main>
+      <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header currentView={currentView} />
+        
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
+          {currentView === 'pos' && ( 
+            <POSView 
+              {...{products, cart, addToCart, updateQuantity, total, syncStatus, searchTerm, setSearchTerm}} 
+              onInitiateCheckout={handleInitiateCheckout}
+              isMobile={isMobile}
+              isCartVisible={isCartVisible}
+              setIsCartVisible={setIsCartVisible}
+            /> 
+          )}
+          {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
+          {currentView === 'products' && ( <ProductManagementView {...{products, onAdd: () => openModal(), onEdit: openModal, onDelete: handleDeleteProduct}} /> )}
+          {currentView === 'reports' && (
+            <ReportsView stats={reportData.stats} topProducts={reportData.topProducts} />
+          )}
+        </main>
+      </div>
+
+      <BottomNavbar currentView={currentView} setCurrentView={setCurrentView} />
       
       {isModalOpen && ( <ProductFormModal product={selectedProduct} onSave={handleSaveProduct} onClose={closeModal} /> )}
-      
       {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
-
       {isPaymentModalOpen && (
         <PaymentModal 
           total={total}
@@ -276,7 +273,17 @@ export default function App() {
           onClose={() => setIsPaymentModalOpen(false)}
         />
       )}
-      <DebugInfoPanel status={syncStatus} />
+      {syncProgress.active && (
+        <SyncProgressModal 
+          progress={(syncProgress.count / syncProgress.total) * 100}
+          count={syncProgress.count}
+          total={syncProgress.total}
+        />
+      )}
+      {isConsoleVisible && <DebugConsole onClose={() => setIsConsoleVisible(false)} />}
+      <div onDoubleClick={() => setIsConsoleVisible(true)}>
+        <DebugInfoPanel status={syncStatus} onManualSync={syncToSupabase} />
+      </div>
     </div>
   );
 }

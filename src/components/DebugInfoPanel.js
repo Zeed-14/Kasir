@@ -1,6 +1,7 @@
 import React from 'react';
 
-const DebugInfoPanel = ({ status }) => {
+// Terima prop baru: onManualSync
+const DebugInfoPanel = ({ status, onManualSync }) => {
   const getStatusInfo = () => {
     switch (status) {
       case 'Syncing from cloud...':
@@ -19,7 +20,12 @@ const DebugInfoPanel = ({ status }) => {
   const { color, text } = getStatusInfo();
 
   return (
-    <div className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-xs z-50 flex items-center gap-2">
+    // Tambahkan cursor-pointer dan hover effect
+    <div 
+      onClick={onManualSync}
+      className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-xs z-50 flex items-center gap-2 cursor-pointer hover:bg-gray-700 transition-colors"
+      title="Klik untuk sinkronisasi manual"
+    >
       <span className={`w-3 h-3 rounded-full ${color} animate-pulse`}></span>
       <span>{text}</span>
     </div>

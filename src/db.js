@@ -8,11 +8,10 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 2. Konfigurasi IndexedDB menggunakan Dexie.js
 export const db = new Dexie('PosDatabase');
-// NAIKKAN VERSI DATABASE KE 3 DAN UBAH SKEMA
-db.version(3).stores({
-  products: 'id, name', 
-  // 'id' (UUID) sekarang adalah kunci utama. '&' berarti unik.
+// NAIKKAN VERSI DATABASE KE 4 DAN TAMBAHKAN 'categories'
+db.version(4).stores({
+  products: '&id, name, category_id', // Tambahkan indeks untuk category_id
   transactions: '&id, transaction_time, synced',
-  // 'id' item adalah kunci utama, dan kita buat indeks untuk 'transaction_id'
-  transaction_items: 'id, transaction_id, product_id',
+  transaction_items: '&id, transaction_id, product_id',
+  categories: '&id, name', // <-- TABEL BARU UNTUK KATEGORI
 });
