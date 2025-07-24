@@ -1,9 +1,7 @@
-
-// src/components/TransactionDetailModal.js
-
 import React, { useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import Receipt from './Receipt';
+import { motion } from 'framer-motion';
 
 const TransactionDetailModal = ({ transaction, onClose }) => {
   const receiptRef = useRef();
@@ -18,8 +16,20 @@ const TransactionDetailModal = ({ transaction, onClose }) => {
       <div style={{ display: 'none' }}>
         <Receipt ref={receiptRef} transaction={transaction} />
       </div>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-lg">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold dark:text-white">Detail Transaksi #{transaction.id.substring(0, 8)}</h2>
             <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white text-3xl">&times;</button>
@@ -55,14 +65,14 @@ const TransactionDetailModal = ({ transaction, onClose }) => {
               <p className="text-2xl font-bold">Rp {Number(transaction.total_amount).toLocaleString('id-ID')}</p>
             </div>
             <button onClick={handlePrint} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center gap-2">
-              <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clipRule="evenodd" />
               </svg>
               Cetak Struk
             </button>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </>
   );
 };

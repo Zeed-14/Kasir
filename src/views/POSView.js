@@ -1,6 +1,7 @@
 import React from 'react';
 import ProductSkeleton from '../components/ProductSkeleton';
 import { X, ShoppingCart } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, cart, addToCart, updateQuantity, total, onInitiateCheckout, searchTerm, setSearchTerm, isMobile, isCartVisible, setIsCartVisible }) => {
   
@@ -9,6 +10,23 @@ const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, 
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  // Varian animasi untuk kontainer produk
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05 // Setiap anak akan muncul dengan jeda 0.05 detik
+      }
+    }
+  };
+
+  // Varian animasi untuk setiap kartu produk
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1 }
+  };
 
   const Cart = () => (
     <div className={`
@@ -95,17 +113,29 @@ const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, 
         {products === undefined ? (
           <ProductSkeleton />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto flex-1">
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto flex-1"
+          >
             {filteredProducts?.map(p => (
-              <div key={p.id} onClick={() => addToCart(p)} className="border dark:border-gray-700 rounded-lg p-3 text-center cursor-pointer hover:shadow-xl hover:scale-105 transition-all flex flex-col justify-between bg-gray-50 dark:bg-gray-700/50">
+              <motion.div
+                key={p.id}
+                variants={itemVariants}
+                whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => addToCart(p)}
+                className="border dark:border-gray-700 rounded-lg p-3 text-center cursor-pointer shadow-sm hover:shadow-xl flex flex-col justify-between bg-gray-50 dark:bg-gray-700/50"
+              >
                 <img src={p.image_url || 'https://placehold.co/150'} alt={p.name} className="w-full h-24 object-cover rounded-md mx-auto mb-2"/>
                 <div>
                   <h3 className="font-semibold text-sm">{p.name}</h3>
                   <p className="text-xs text-gray-600 dark:text-gray-400">Rp {Number(p.price).toLocaleString('id-ID')}</p>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
       <div className={`transition-all duration-300 ${isMobile ? 'w-0' : 'w-1/3'}`}>

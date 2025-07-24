@@ -1,7 +1,5 @@
-
-// src/components/ProductFormModal.js
-
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 
 const ProductFormModal = ({ product, categories, onSave, onClose }) => {
   const [formData, setFormData] = useState({
@@ -23,8 +21,20 @@ const ProductFormModal = ({ product, categories, onSave, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: -30, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: -30, opacity: 0 }}
+        className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-2xl font-bold mb-6 dark:text-white">{product ? 'Edit Produk' : 'Tambah Produk Baru'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -62,8 +72,8 @@ const ProductFormModal = ({ product, categories, onSave, onClose }) => {
             <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Simpan</button>
           </div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

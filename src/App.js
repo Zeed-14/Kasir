@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import './utils/logger';
 import { db, supabase } from './db';
@@ -18,31 +19,8 @@ import SyncProgressModal from './components/SyncProgressModal';
 import DebugConsole from './components/DebugConsole';
 import CategoryManagementView from './views/CategoryManagementView';
 import AuthView from './views/AuthView';
-import InstallPWAButton from './components/InstallPWAButton'; // <-- IMPORT BARU
-
-const CategoryFormModal = ({ category, onSave, onClose }) => {
-  const [name, setName] = useState(category?.name || '');
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (name.trim()) {
-      onSave({ name });
-    }
-  };
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-sm">
-        <h2 className="text-2xl font-bold mb-6">{category ? 'Edit Kategori' : 'Tambah Kategori'}</h2>
-        <form onSubmit={handleSubmit}>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border rounded-lg" placeholder="Nama Kategori" required autoFocus />
-          <div className="flex justify-end gap-4 mt-8">
-            <button type="button" onClick={onClose} className="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg">Batal</button>
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Simpan</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
+import InstallPWAButton from './components/InstallPWAButton';
+import CategoryFormModal from './components/CategoryFormModal';
 
 export default function App() {
   // --- STATE ---
@@ -64,17 +42,12 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [reportPeriod, setReportPeriod] = useState('today');
   const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false);
-  // --- STATE BARU: Untuk menyimpan event instalasi ---
   const [installPrompt, setInstallPrompt] = useState(null);
 
   // --- EFEK ---
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => subscription.unsubscribe();
   }, []);
 
@@ -84,17 +57,13 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- EFEK BARU: Untuk menangkap event instalasi PWA ---
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setInstallPrompt(e);
-      console.log('PWA install prompt event captured!');
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
   // --- DATA DARI INDEXEDDB ---
@@ -187,10 +156,7 @@ export default function App() {
       startDate.setDate(startDate.getDate() - 29);
       startDate.setHours(0, 0, 0, 0);
     }
-    const filteredTransactions = transactions.filter(tx => {
-      const txDate = new Date(tx.transaction_time);
-      return txDate >= startDate && txDate <= endDate;
-    });
+    const filteredTransactions = transactions.filter(tx => new Date(tx.transaction_time) >= startDate && new Date(tx.transaction_time) <= endDate);
     const filteredTransactionIds = filteredTransactions.map(tx => tx.id);
     const totalRevenue = filteredTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
     const transactionCount = filteredTransactions.length;
@@ -258,21 +224,12 @@ export default function App() {
   const addToCart = (product) => {
     setCart(currentCart => {
       const existingItem = currentCart.find(item => item.id === product.id);
-      if (existingItem) {
-        return currentCart.map(item =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      }
+      if (existingItem) return currentCart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
       return [...currentCart, { ...product, quantity: 1 }];
     });
   };
   const updateQuantity = (productId, amount) => {
-    setCart(currentCart => {
-      const updatedCart = currentCart.map(item =>
-        item.id === productId ? { ...item, quantity: item.quantity + amount } : item
-      );
-      return updatedCart.filter(item => item.quantity > 0);
-    });
+    setCart(currentCart => currentCart.map(item => item.id === productId ? { ...item, quantity: item.quantity + amount } : item).filter(item => item.quantity > 0));
   };
   const handleSaveProduct = async (productData) => {
     try {
@@ -303,14 +260,8 @@ export default function App() {
       }
     }
   };
-  const openModal = (product = null) => {
-    setSelectedProduct(product);
-    setIsModalOpen(true);
-  };
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedProduct(null);
-  };
+  const openModal = (product = null) => { setSelectedProduct(product); setIsModalOpen(true); };
+  const closeModal = () => { setIsModalOpen(false); setSelectedProduct(null); };
   const handleSaveCategory = async (categoryData) => {
     try {
       if (selectedCategory) {
@@ -337,28 +288,26 @@ export default function App() {
       }
     }
   };
-  const openCategoryModal = (category = null) => {
-    setSelectedCategory(category);
-    setIsCategoryModalOpen(true);
-  };
-  const closeCategoryModal = () => {
-    setIsCategoryModalOpen(false);
-    setSelectedCategory(null);
-  };
+  const openCategoryModal = (category = null) => { setSelectedCategory(category); setIsCategoryModalOpen(true); };
+  const closeCategoryModal = () => { setIsCategoryModalOpen(false); setSelectedCategory(null); };
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
   const handleInstallClick = async () => {
-    if (!installPrompt) {
-      return;
-    }
+    if (!installPrompt) return;
     installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      console.log('User accepted the install prompt');
-    } else {
-      console.log('User dismissed the install prompt');
-    }
+    await installPrompt.userChoice;
     setInstallPrompt(null);
+  };
+
+  // --- PENGATURAN ANIMASI ---
+  const pageVariants = {
+    initial: { opacity: 0, x: -10 },
+    in: { opacity: 1, x: 0 },
+    out: { opacity: 0, x: 10 },
+  };
+  const pageTransition = {
+    type: 'tween',
+    ease: 'anticipate',
+    duration: 0.4,
   };
 
   // --- RENDER ---
@@ -367,48 +316,60 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 font-sans">
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 font-sans">
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout} user={session.user} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header currentView={currentView} />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
-          {currentView === 'pos' && ( 
-            <POSView 
-              {...{products, cart, addToCart, updateQuantity, total, syncStatus, searchTerm, setSearchTerm}} 
-              onInitiateCheckout={handleInitiateCheckout}
-              isMobile={isMobile}
-              isCartVisible={isCartVisible}
-              setIsCartVisible={setIsCartVisible}
-              categories={categories}
-              activeCategoryId={activeCategoryId}
-              setActiveCategoryId={setActiveCategoryId}
-            /> 
-          )}
-          {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
-          {currentView === 'products' && ( <ProductManagementView {...{products, onAdd: () => openModal(), onEdit: openModal, onDelete: handleDeleteProduct}} /> )}
-          {currentView === 'categories' && ( <CategoryManagementView categories={categories} onAdd={openCategoryModal} onEdit={openCategoryModal} onDelete={handleDeleteCategory} /> )}
-          {currentView === 'reports' && (
-            <ReportsView 
-              reportData={reportData}
-              reportPeriod={reportPeriod}
-              setReportPeriod={setReportPeriod}
-              isInitialSyncComplete={isInitialSyncComplete}
-            />
-          )}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentView}
+              initial="initial"
+              animate="in"
+              exit="out"
+              variants={pageVariants}
+              transition={pageTransition}
+            >
+              {currentView === 'pos' && ( 
+                <POSView 
+                  products={products}
+                  cart={cart}
+                  addToCart={addToCart}
+                  updateQuantity={updateQuantity}
+                  total={total}
+                  onInitiateCheckout={handleInitiateCheckout}
+                  isMobile={isMobile}
+                  isCartVisible={isCartVisible}
+                  setIsCartVisible={setIsCartVisible}
+                  categories={categories}
+                  activeCategoryId={activeCategoryId}
+                  setActiveCategoryId={setActiveCategoryId}
+                  searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                /> 
+              )}
+              {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
+              {currentView === 'products' && ( <ProductManagementView products={products} onAdd={() => openModal()} onEdit={openModal} onDelete={handleDeleteProduct} /> )}
+              {currentView === 'categories' && ( <CategoryManagementView categories={categories} onAdd={openCategoryModal} onEdit={openCategoryModal} onDelete={handleDeleteCategory} /> )}
+              {currentView === 'reports' && ( <ReportsView reportData={reportData} reportPeriod={reportPeriod} setReportPeriod={setReportPeriod} isInitialSyncComplete={isInitialSyncComplete} /> )}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
       <BottomNavbar currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout} user={session.user} />
       
-      {isModalOpen && ( <ProductFormModal product={selectedProduct} categories={categories} onSave={handleSaveProduct} onClose={closeModal} /> )}
-      {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
-      {isPaymentModalOpen && ( <PaymentModal total={total} onConfirm={handleConfirmPayment} onClose={() => setIsPaymentModalOpen(false)} /> )}
+      <AnimatePresence>
+        {isModalOpen && ( <ProductFormModal product={selectedProduct} categories={categories} onSave={handleSaveProduct} onClose={closeModal} /> )}
+        {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
+        {isPaymentModalOpen && ( <PaymentModal total={total} onConfirm={handleConfirmPayment} onClose={() => setIsPaymentModalOpen(false)} /> )}
+        {isCategoryModalOpen && ( <CategoryFormModal category={selectedCategory} onSave={handleSaveCategory} onClose={closeCategoryModal} /> )}
+      </AnimatePresence>
+
       {syncProgress.active && ( <SyncProgressModal progress={(syncProgress.count / syncProgress.total) * 100} count={syncProgress.count} total={syncProgress.total} /> )}
       {isConsoleVisible && <DebugConsole onClose={() => setIsConsoleVisible(false)} />}
       <div onDoubleClick={() => setIsConsoleVisible(true)}>
         <DebugInfoPanel status={syncStatus} onManualSync={syncToSupabase} />
       </div>
-      {isCategoryModalOpen && ( <CategoryFormModal category={selectedCategory} onSave={handleSaveCategory} onClose={closeCategoryModal} /> )}
-
       {installPrompt && <InstallPWAButton onInstall={handleInstallClick} />}
     </div>
   );
