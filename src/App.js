@@ -61,17 +61,17 @@ export default function App() {
   const [activeCategoryId, setActiveCategoryId] = useState('all');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [reportPeriod, setReportPeriod] = useState('today');
+  const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false);
 
   // --- EFEK ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -95,7 +95,6 @@ export default function App() {
       const { data: txs } = await supabase.from('transactions').select('*');
       const { data: items } = await supabase.from('transaction_items').select('*');
       const { data: cats } = await supabase.from('categories').select('*');
-      
       await db.transaction('rw', db.products, db.transactions, db.transaction_items, db.categories, async () => {
         if (prods) await db.products.bulkPut(prods);
         if (txs) {
@@ -106,6 +105,7 @@ export default function App() {
         if (cats) await db.categories.bulkPut(cats);
       });
       setSyncStatus('Synced');
+      setIsInitialSyncComplete(true);
     } catch (error) {
       setSyncStatus('Offline (Sync Error)');
       console.error('Sync from Supabase error:', error.message);
@@ -157,18 +157,30 @@ export default function App() {
 
   // --- LOGIKA KALKULASI LAPORAN ---
   const reportData = useMemo(() => {
-    if (!transactions || !transactionItems || !products) {
-      return { stats: null, topProducts: [] };
+    if (!isInitialSyncComplete || !transactions || !transactionItems || !products) {
+      return { stats: null, topProducts: [], chartData: [] };
     }
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todaysTransactions = transactions.filter(tx => new Date(tx.transaction_time) >= todayStart);
-    const todaysTransactionIds = todaysTransactions.map(tx => tx.id);
-    const totalRevenue = todaysTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
-    const transactionCount = todaysTransactions.length;
+    const endDate = new Date();
+    const startDate = new Date();
+    if (reportPeriod === 'today') {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (reportPeriod === '7days') {
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+    } else if (reportPeriod === '30days') {
+      startDate.setDate(startDate.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+    }
+    const filteredTransactions = transactions.filter(tx => {
+      const txDate = new Date(tx.transaction_time);
+      return txDate >= startDate && txDate <= endDate;
+    });
+    const filteredTransactionIds = filteredTransactions.map(tx => tx.id);
+    const totalRevenue = filteredTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
+    const transactionCount = filteredTransactions.length;
     const productSales = {};
-    const todaysItems = transactionItems.filter(item => todaysTransactionIds.includes(item.transaction_id));
-    todaysItems.forEach(item => {
+    const filteredItems = transactionItems.filter(item => filteredTransactionIds.includes(item.transaction_id));
+    filteredItems.forEach(item => {
       productSales[item.product_id] = (productSales[item.product_id] || 0) + item.quantity;
     });
     const topProducts = Object.entries(productSales)
@@ -178,8 +190,14 @@ export default function App() {
       })
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
-    return { stats: { totalRevenue, transactionCount }, topProducts };
-  }, [transactions, transactionItems, products]);
+    const salesByDay = {};
+    filteredTransactions.forEach(tx => {
+      const day = new Date(tx.transaction_time).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+      salesByDay[day] = (salesByDay[day] || 0) + tx.total_amount;
+    });
+    const chartData = Object.entries(salesByDay).map(([name, total]) => ({ name, total })).reverse();
+    return { stats: { totalRevenue, transactionCount }, topProducts, chartData };
+  }, [transactions, transactionItems, products, reportPeriod, isInitialSyncComplete]);
 
   // --- LOGIKA CRUD KATEGORI ---
   const handleSaveCategory = async (categoryData) => {
@@ -340,16 +358,14 @@ export default function App() {
           )}
           {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
           {currentView === 'products' && ( <ProductManagementView {...{products, onAdd: () => openModal(), onEdit: openModal, onDelete: handleDeleteProduct}} /> )}
-          {currentView === 'categories' && (
-            <CategoryManagementView 
-              categories={categories}
-              onAdd={openCategoryModal}
-              onEdit={openCategoryModal}
-              onDelete={handleDeleteCategory}
-            />
-          )}
+          {currentView === 'categories' && ( <CategoryManagementView categories={categories} onAdd={openCategoryModal} onEdit={openCategoryModal} onDelete={handleDeleteCategory} /> )}
           {currentView === 'reports' && (
-            <ReportsView stats={reportData.stats} topProducts={reportData.topProducts} />
+            <ReportsView 
+              reportData={reportData}
+              reportPeriod={reportPeriod}
+              setReportPeriod={setReportPeriod}
+              isInitialSyncComplete={isInitialSyncComplete}
+            />
           )}
         </main>
       </div>
@@ -363,13 +379,7 @@ export default function App() {
       <div onDoubleClick={() => setIsConsoleVisible(true)}>
         <DebugInfoPanel status={syncStatus} onManualSync={syncToSupabase} />
       </div>
-      {isCategoryModalOpen && (
-        <CategoryFormModal
-          category={selectedCategory}
-          onSave={handleSaveCategory}
-          onClose={closeCategoryModal}
-        />
-      )}
+      {isCategoryModalOpen && ( <CategoryFormModal category={selectedCategory} onSave={handleSaveCategory} onClose={closeCategoryModal} /> )}
     </div>
   );
 }
