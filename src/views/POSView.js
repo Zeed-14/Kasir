@@ -2,11 +2,14 @@ import React from 'react';
 import ProductSkeleton from '../components/ProductSkeleton';
 import { X, ShoppingCart } from 'lucide-react';
 
-const POSView = ({ products, cart, addToCart, updateQuantity, total, onInitiateCheckout, syncStatus, searchTerm, setSearchTerm, isMobile, isCartVisible, setIsCartVisible }) => {
+// Terima prop baru: categories, activeCategoryId, setActiveCategoryId
+const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, cart, addToCart, updateQuantity, total, onInitiateCheckout, syncStatus, searchTerm, setSearchTerm, isMobile, isCartVisible, setIsCartVisible }) => {
   
-  const filteredProducts = products?.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = products?.filter(p => {
+    const matchesCategory = activeCategoryId === 'all' ? true : p.category_id === activeCategoryId;
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   const Cart = () => (
     <div className={`
@@ -59,11 +62,11 @@ const POSView = ({ products, cart, addToCart, updateQuantity, total, onInitiateC
 
   return (
     <>
-      {/* Product List */}
+      {/* Daftar Produk */}
       <div className="flex-1 bg-white rounded-lg shadow p-6 flex flex-col">
         <div className="mb-4">
-          <h1 className="text-3xl font-bold">Selamat Datang, Kasir!</h1>
-          <p className="text-gray-500">Pilih produk untuk ditambahkan ke keranjang.</p>
+          <h1 className="text-3xl font-bold">Pilih Produk</h1>
+          <p className="text-gray-500">Klik produk untuk ditambahkan ke keranjang.</p>
         </div>
         <div className="mb-4">
           <input 
@@ -74,6 +77,26 @@ const POSView = ({ products, cart, addToCart, updateQuantity, total, onInitiateC
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        
+        {/* --- FILTER KATEGORI BARU --- */}
+        <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-2 -mx-6 px-6">
+          <button 
+            onClick={() => setActiveCategoryId('all')}
+            className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${activeCategoryId === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+          >
+            Semua
+          </button>
+          {categories?.map(cat => (
+            <button 
+              key={cat.id}
+              onClick={() => setActiveCategoryId(cat.id)}
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${activeCategoryId === cat.id ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+
         {products === undefined ? (
           <ProductSkeleton />
         ) : (
@@ -101,7 +124,7 @@ const POSView = ({ products, cart, addToCart, updateQuantity, total, onInitiateC
       {!isCartVisible && isMobile && (
         <button 
           onClick={() => setIsCartVisible(true)}
-          className="fixed bottom-6 right-6 bg-blue-600 text-white w-16 h-16 rounded-full shadow-lg flex items-center justify-center z-20"
+          className="fixed bottom-20 right-6 bg-blue-600 text-white w-16 h-16 rounded-full shadow-lg flex items-center justify-center z-20"
         >
           <ShoppingCart size={28} />
           {cart.length > 0 && (

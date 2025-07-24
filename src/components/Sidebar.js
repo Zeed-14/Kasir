@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, ScrollText, Package, BarChart3, ShoppingBag } from 'lucide-react';
+import { LayoutGrid, ScrollText, Package, BarChart3, List, ShoppingBag, LogOut } from 'lucide-react';
 
 const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   <div className="group relative">
@@ -15,30 +15,39 @@ const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   </div>
 );
 
-// Sidebar ini hanya akan muncul di layar besar (hidden lg:flex)
-const Sidebar = ({ currentView, setCurrentView }) => {
+// Terima prop baru: user, onLogout
+const Sidebar = ({ currentView, setCurrentView, user, onLogout }) => {
   const navItems = [
     { id: 'pos', label: 'Kasir', icon: LayoutGrid },
     { id: 'transactions', label: 'Riwayat Transaksi', icon: ScrollText },
     { id: 'products', label: 'Manajemen Produk', icon: Package },
+    { id: 'categories', label: 'Manajemen Kategori', icon: List },
     { id: 'reports', label: 'Laporan', icon: BarChart3 },
   ];
 
   return (
-    <nav className="hidden lg:flex w-24 bg-gray-800 text-white flex-col items-center py-6 space-y-8">
-      <div className="bg-blue-600 p-3 rounded-xl text-white">
-        <ShoppingBag size={32} />
+    <nav className="hidden lg:flex w-24 bg-gray-800 text-white flex-col items-center justify-between py-6">
+      <div className="flex flex-col items-center space-y-8">
+        <div className="bg-blue-600 p-3 rounded-xl text-white">
+          <ShoppingBag size={32} />
+        </div>
+        <div className="flex flex-col items-center space-y-4">
+          {navItems.map(item => (
+            <NavButton 
+              key={item.id}
+              icon={item.icon}
+              label={item.label}
+              isActive={currentView === item.id}
+              onClick={() => setCurrentView(item.id)}
+            />
+          ))}
+        </div>
       </div>
       <div className="flex flex-col items-center space-y-4">
-        {navItems.map(item => (
-          <NavButton 
-            key={item.id}
-            icon={item.icon}
-            label={item.label}
-            isActive={currentView === item.id}
-            onClick={() => setCurrentView(item.id)}
-          />
-        ))}
+        <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center font-bold text-lg" title={user?.email}>
+          {user?.email ? user.email[0].toUpperCase() : '?'}
+        </div>
+        <NavButton icon={LogOut} label="Keluar" onClick={onLogout} />
       </div>
     </nav>
   );

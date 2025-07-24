@@ -3,9 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import './utils/logger';
 import { db, supabase } from './db';
-import Sidebar from './components/Sidebar'; // <-- Nama baru
-import Header from './components/Header'; // <-- Komponen baru
-import BottomNavbar from './components/BottomNavbar'; // <-- Komponen baru
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import BottomNavbar from './components/BottomNavbar';
 import ProductFormModal from './components/ProductFormModal';
 import TransactionDetailModal from './components/TransactionDetailModal';
 import PaymentModal from './components/PaymentModal';
@@ -16,9 +16,36 @@ import ReportsView from './views/ReportsView';
 import DebugInfoPanel from './components/DebugInfoPanel';
 import SyncProgressModal from './components/SyncProgressModal';
 import DebugConsole from './components/DebugConsole';
+import CategoryManagementView from './views/CategoryManagementView';
+import AuthView from './views/AuthView';
+
+const CategoryFormModal = ({ category, onSave, onClose }) => {
+  const [name, setName] = useState(category?.name || '');
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (name.trim()) {
+      onSave({ name });
+    }
+  };
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-sm">
+        <h2 className="text-2xl font-bold mb-6">{category ? 'Edit Kategori' : 'Tambah Kategori'}</h2>
+        <form onSubmit={handleSubmit}>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border rounded-lg" placeholder="Nama Kategori" required autoFocus />
+          <div className="flex justify-end gap-4 mt-8">
+            <button type="button" onClick={onClose} className="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg">Batal</button>
+            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Simpan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 export default function App() {
   // --- STATE ---
+  const [session, setSession] = useState(null);
   const [cart, setCart] = useState([]);
   const [syncStatus, setSyncStatus] = useState('Idle');
   const [currentView, setCurrentView] = useState('pos');
@@ -29,12 +56,25 @@ export default function App() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ active: false, count: 0, total: 0 });
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
-
-  // --- STATE BARU UNTUK RESPONSIVE ---
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [isCartVisible, setIsCartVisible] = useState(false);
+  const [activeCategoryId, setActiveCategoryId] = useState('all');
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
-  // Efek untuk mendeteksi perubahan ukuran layar
+  // --- EFEK ---
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handleResize);
@@ -43,6 +83,7 @@ export default function App() {
 
   // --- DATA DARI INDEXEDDB ---
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), []);
+  const categories = useLiveQuery(() => db.categories.orderBy('name').toArray(), []);
   const transactions = useLiveQuery(() => db.transactions.orderBy('transaction_time').reverse().toArray(), []);
   const transactionItems = useLiveQuery(() => db.transaction_items.toArray(), []);
 
@@ -50,22 +91,21 @@ export default function App() {
   const syncFromSupabase = useCallback(async () => {
     try {
       setSyncStatus('Syncing from cloud...');
-      const { data: prods, error: pErr } = await supabase.from('products').select('*');
-      if (pErr) throw pErr;
-      const { data: txs, error: tErr } = await supabase.from('transactions').select('*');
-      if (tErr) throw tErr;
-      const { data: items, error: iErr } = await supabase.from('transaction_items').select('*');
-      if (iErr) throw iErr;
-      await db.transaction('rw', db.products, db.transactions, db.transaction_items, async () => {
+      const { data: prods } = await supabase.from('products').select('*');
+      const { data: txs } = await supabase.from('transactions').select('*');
+      const { data: items } = await supabase.from('transaction_items').select('*');
+      const { data: cats } = await supabase.from('categories').select('*');
+      
+      await db.transaction('rw', db.products, db.transactions, db.transaction_items, db.categories, async () => {
         if (prods) await db.products.bulkPut(prods);
         if (txs) {
           const syncedTxs = txs.map(tx => ({ ...tx, synced: 1 }));
           await db.transactions.bulkPut(syncedTxs);
         }
         if (items) await db.transaction_items.bulkPut(items);
+        if (cats) await db.categories.bulkPut(cats);
       });
       setSyncStatus('Synced');
-      console.log('Atomic sync from cloud complete.');
     } catch (error) {
       setSyncStatus('Offline (Sync Error)');
       console.error('Sync from Supabase error:', error.message);
@@ -104,14 +144,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    syncFromSupabase();
-    syncToSupabase();
-    const intervalId = setInterval(() => {
-        syncToSupabase();
-        syncFromSupabase();
-    }, 60000);
-    return () => clearInterval(intervalId);
-  }, [syncFromSupabase, syncToSupabase]);
+    if (session) {
+      syncFromSupabase();
+      syncToSupabase();
+      const intervalId = setInterval(() => {
+          syncToSupabase();
+          syncFromSupabase();
+      }, 60000);
+      return () => clearInterval(intervalId);
+    }
+  }, [session, syncFromSupabase, syncToSupabase]);
 
   // --- LOGIKA KALKULASI LAPORAN ---
   const reportData = useMemo(() => {
@@ -139,13 +181,50 @@ export default function App() {
     return { stats: { totalRevenue, transactionCount }, topProducts };
   }, [transactions, transactionItems, products]);
 
+  // --- LOGIKA CRUD KATEGORI ---
+  const handleSaveCategory = async (categoryData) => {
+    try {
+      if (selectedCategory) {
+        const { data, error } = await supabase.from('categories').update({ name: categoryData.name }).eq('id', selectedCategory.id).select().single();
+        if (error) throw error;
+        await db.categories.put(data);
+      } else {
+        const { data, error } = await supabase.from('categories').insert({ name: categoryData.name }).select().single();
+        if (error) throw error;
+        await db.categories.put(data);
+      }
+      closeCategoryModal();
+    } catch (error) {
+      alert(`Error: ${error.message}`);
+    }
+  };
+  const handleDeleteCategory = async (categoryId) => {
+    if (window.confirm('Menghapus kategori akan membuat produk terkait menjadi "Tanpa Kategori". Lanjutkan?')) {
+      try {
+        await supabase.from('categories').delete().eq('id', categoryId);
+        await db.categories.delete(categoryId);
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      }
+    }
+  };
+  const openCategoryModal = (category = null) => {
+    setSelectedCategory(category);
+    setIsCategoryModalOpen(true);
+  };
+  const closeCategoryModal = () => {
+    setIsCategoryModalOpen(false);
+    setSelectedCategory(null);
+  };
+
   // --- FUNGSI-FUNGSI LAINNYA ---
+  const handleLogout = async () => { await supabase.auth.signOut(); };
   const handleInitiateCheckout = () => { if (cart.length > 0) setIsPaymentModalOpen(true); };
   const handleConfirmPayment = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !session?.user) return;
     const transactionId = crypto.randomUUID();
     const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const newTransaction = { id: transactionId, total_amount: totalAmount, transaction_time: new Date().toISOString(), synced: 0 };
+    const newTransaction = { id: transactionId, total_amount: totalAmount, transaction_time: new Date().toISOString(), synced: 0, cashier_id: session.user.id };
     const newTransactionItems = cart.map(item => ({ id: crypto.randomUUID(), transaction_id: transactionId, product_id: item.id, quantity: item.quantity, price_at_transaction: item.price }));
     try {
       await db.transaction('rw', db.transactions, db.transaction_items, db.products, async () => {
@@ -157,7 +236,7 @@ export default function App() {
       });
       setCart([]);
       setIsPaymentModalOpen(false);
-      setIsCartVisible(false); // Sembunyikan keranjang setelah bayar di mobile
+      setIsCartVisible(false);
       await syncToSupabase();
     } catch (error) {
       console.error('Checkout failed:', error);
@@ -204,7 +283,7 @@ export default function App() {
         const { data, error } = await supabase.from('products').update(productData).eq('id', selectedProduct.id).select().single();
         if (error) throw error;
         savedProduct = data;
-        await db.products.update(savedProduct.id, savedProduct);
+        await db.products.put(savedProduct);
       } else {
         const { data, error } = await supabase.from('products').insert(productData).select().single();
         if (error) throw error;
@@ -237,13 +316,15 @@ export default function App() {
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // --- RENDER ---
+  if (!session) {
+    return <AuthView />;
+  }
+
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
-      <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
-
+      <Sidebar currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout} user={session.user} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header currentView={currentView} />
-        
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
           {currentView === 'pos' && ( 
             <POSView 
@@ -252,38 +333,43 @@ export default function App() {
               isMobile={isMobile}
               isCartVisible={isCartVisible}
               setIsCartVisible={setIsCartVisible}
+              categories={categories}
+              activeCategoryId={activeCategoryId}
+              setActiveCategoryId={setActiveCategoryId}
             /> 
           )}
           {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
           {currentView === 'products' && ( <ProductManagementView {...{products, onAdd: () => openModal(), onEdit: openModal, onDelete: handleDeleteProduct}} /> )}
+          {currentView === 'categories' && (
+            <CategoryManagementView 
+              categories={categories}
+              onAdd={openCategoryModal}
+              onEdit={openCategoryModal}
+              onDelete={handleDeleteCategory}
+            />
+          )}
           {currentView === 'reports' && (
             <ReportsView stats={reportData.stats} topProducts={reportData.topProducts} />
           )}
         </main>
       </div>
-
-      <BottomNavbar currentView={currentView} setCurrentView={setCurrentView} />
+      <BottomNavbar currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout} user={session.user} />
       
-      {isModalOpen && ( <ProductFormModal product={selectedProduct} onSave={handleSaveProduct} onClose={closeModal} /> )}
+      {isModalOpen && ( <ProductFormModal product={selectedProduct} categories={categories} onSave={handleSaveProduct} onClose={closeModal} /> )}
       {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
-      {isPaymentModalOpen && (
-        <PaymentModal 
-          total={total}
-          onConfirm={handleConfirmPayment}
-          onClose={() => setIsPaymentModalOpen(false)}
-        />
-      )}
-      {syncProgress.active && (
-        <SyncProgressModal 
-          progress={(syncProgress.count / syncProgress.total) * 100}
-          count={syncProgress.count}
-          total={syncProgress.total}
-        />
-      )}
+      {isPaymentModalOpen && ( <PaymentModal total={total} onConfirm={handleConfirmPayment} onClose={() => setIsPaymentModalOpen(false)} /> )}
+      {syncProgress.active && ( <SyncProgressModal progress={(syncProgress.count / syncProgress.total) * 100} count={syncProgress.count} total={syncProgress.total} /> )}
       {isConsoleVisible && <DebugConsole onClose={() => setIsConsoleVisible(false)} />}
       <div onDoubleClick={() => setIsConsoleVisible(true)}>
         <DebugInfoPanel status={syncStatus} onManualSync={syncToSupabase} />
       </div>
+      {isCategoryModalOpen && (
+        <CategoryFormModal
+          category={selectedCategory}
+          onSave={handleSaveCategory}
+          onClose={closeCategoryModal}
+        />
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, ScrollText, Package, BarChart3 } from 'lucide-react';
+import { LayoutGrid, ScrollText, Package, BarChart3, List, LogOut } from 'lucide-react';
 
 const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   <button 
@@ -11,11 +11,13 @@ const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   </button>
 );
 
-const BottomNavbar = ({ currentView, setCurrentView }) => {
+// Terima prop baru: user, onLogout
+const BottomNavbar = ({ currentView, setCurrentView, user, onLogout }) => {
   const navItems = [
     { id: 'pos', label: 'Kasir', icon: LayoutGrid },
     { id: 'transactions', label: 'Riwayat', icon: ScrollText },
     { id: 'products', label: 'Produk', icon: Package },
+    { id: 'categories', label: 'Kategori', icon: List },
     { id: 'reports', label: 'Laporan', icon: BarChart3 },
   ];
 
@@ -31,6 +33,7 @@ const BottomNavbar = ({ currentView, setCurrentView }) => {
           onClick={() => setCurrentView(item.id)}
         />
       ))}
+      <NavButton icon={LogOut} label="Keluar" onClick={onLogout} />
     </nav>
   );
 };
