@@ -1,3 +1,6 @@
+
+// src/components/PaymentModal.js
+
 import React, { useState, useMemo } from 'react';
 
 const PaymentModal = ({ total, onConfirm, onClose }) => {
@@ -16,32 +19,28 @@ const PaymentModal = ({ total, onConfirm, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-sm">
-        <h2 className="text-2xl font-bold mb-4 text-center">Konfirmasi Pembayaran</h2>
-        
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-sm">
+        <h2 className="text-2xl font-bold mb-4 text-center dark:text-white">Konfirmasi Pembayaran</h2>
         <div className="mb-6 text-center">
-          <p className="text-gray-600">Total Belanja</p>
-          <p className="text-4xl font-bold tracking-tight">Rp {total.toLocaleString('id-ID')}</p>
+          <p className="text-gray-600 dark:text-gray-400">Total Belanja</p>
+          <p className="text-4xl font-bold tracking-tight dark:text-white">Rp {total.toLocaleString('id-ID')}</p>
         </div>
-
         <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Uang Tunai Diterima</label>
+          <label className="block text-gray-700 dark:text-gray-300 mb-2">Uang Tunai Diterima</label>
           <input 
             type="number"
             placeholder="Masukkan jumlah uang..."
-            className="w-full p-3 border rounded-lg text-lg text-right"
+            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg text-lg text-right bg-white dark:bg-gray-700 dark:text-white"
             value={cashReceived}
             onChange={(e) => setCashReceived(e.target.value)}
             autoFocus
           />
         </div>
-
         <div className="mb-8 text-center">
-          <p className="text-gray-600">Kembalian</p>
-          <p className="text-3xl font-semibold text-green-600">Rp {change.toLocaleString('id-ID')}</p>
+          <p className="text-gray-600 dark:text-gray-400">Kembalian</p>
+          <p className="text-3xl font-semibold text-green-600 dark:text-green-400">Rp {change.toLocaleString('id-ID')}</p>
         </div>
-
         <div className="flex flex-col gap-3">
           <button 
             onClick={handleConfirm} 
@@ -53,7 +52,7 @@ const PaymentModal = ({ total, onConfirm, onClose }) => {
           <button 
             type="button" 
             onClick={onClose} 
-            className="w-full bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300"
+            className="w-full bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-200 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
           >
             Batal
           </button>

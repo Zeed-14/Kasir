@@ -1,6 +1,8 @@
+/** @type {import('tailwindcss').Config} */
 module.exports = {
-  purge: ['./src/**/*.{js,jsx,ts,tsx}', './public/index.html'], // Pastikan path ini benar
-  darkMode: false, // or 'media' or 'class'
+  // Versi 2 (purge)
+  purge: ['./src/**/*.{js,jsx,ts,tsx}', './public/index.html'],
+  darkMode: 'class', // <-- TAMBAHKAN BARIS INI
   theme: {
     extend: {},
   },

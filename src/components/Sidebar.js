@@ -1,5 +1,6 @@
 import React from 'react';
-import { LayoutGrid, ScrollText, Package, BarChart3, List, ShoppingBag, LogOut } from 'lucide-react';
+import { LayoutGrid, ScrollText, Package, BarChart3, List, ShoppingBag, LogOut, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   <div className="group relative">
@@ -15,8 +16,9 @@ const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   </div>
 );
 
-// Terima prop baru: user, onLogout
 const Sidebar = ({ currentView, setCurrentView, user, onLogout }) => {
+  const { theme, toggleTheme } = useTheme();
+
   const navItems = [
     { id: 'pos', label: 'Kasir', icon: LayoutGrid },
     { id: 'transactions', label: 'Riwayat Transaksi', icon: ScrollText },
@@ -44,6 +46,11 @@ const Sidebar = ({ currentView, setCurrentView, user, onLogout }) => {
         </div>
       </div>
       <div className="flex flex-col items-center space-y-4">
+        <NavButton 
+          icon={theme === 'light' ? Moon : Sun}
+          label={theme === 'light' ? 'Mode Gelap' : 'Mode Terang'}
+          onClick={toggleTheme} 
+        />
         <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center font-bold text-lg" title={user?.email}>
           {user?.email ? user.email[0].toUpperCase() : '?'}
         </div>
