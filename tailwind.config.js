@@ -1,10 +1,16 @@
 /** @type {import('tailwindcss').Config} */
+const defaultTheme = require('tailwindcss/defaultTheme'); // Import tema default
+
 module.exports = {
-  // Versi 2 (purge)
   purge: ['./src/**/*.{js,jsx,ts,tsx}', './public/index.html'],
-  darkMode: 'class', // <-- TAMBAHKAN BARIS INI
+  darkMode: 'class',
   theme: {
-    extend: {},
+    extend: {
+      // --- TAMBAHKAN BAGIAN INI ---
+      fontFamily: {
+        sans: ['Poppins', ...defaultTheme.fontFamily.sans],
+      },
+    },
   },
   variants: {
     extend: {},

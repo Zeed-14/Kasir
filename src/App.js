@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast, { Toaster } from 'react-hot-toast';
 
 import './utils/logger';
 import { db, supabase } from './db';
@@ -21,6 +22,7 @@ import CategoryManagementView from './views/CategoryManagementView';
 import AuthView from './views/AuthView';
 import InstallPWAButton from './components/InstallPWAButton';
 import CategoryFormModal from './components/CategoryFormModal';
+import ConfirmationModal from './components/ConfirmationModal';
 
 export default function App() {
   // --- STATE ---
@@ -43,6 +45,7 @@ export default function App() {
   const [reportPeriod, setReportPeriod] = useState('today');
   const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
+  const [confirmState, setConfirmState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   // --- EFEK ---
   useEffect(() => {
@@ -181,9 +184,105 @@ export default function App() {
     return { stats: { totalRevenue, transactionCount }, topProducts, chartData };
   }, [transactions, transactionItems, products, reportPeriod, isInitialSyncComplete]);
 
-  // --- FUNGSI-FUNGSI LAINNYA ---
-  const handleLogout = async () => { await supabase.auth.signOut(); };
-  const handleInitiateCheckout = () => { if (cart.length > 0) setIsPaymentModalOpen(true); };
+  // --- LOGIKA CRUD DENGAN NOTIFIKASI BARU ---
+  const handleSaveProduct = (productData) => {
+    const promise = new Promise(async (resolve, reject) => {
+      try {
+        if (selectedProduct) {
+          const { data, error } = await supabase.from('products').update(productData).eq('id', selectedProduct.id).select().single();
+          if (error) throw error;
+          await db.products.put(data);
+        } else {
+          const { data, error } = await supabase.from('products').insert(productData).select().single();
+          if (error) throw error;
+          await db.products.add(data);
+        }
+        closeModal();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    toast.promise(promise, {
+      loading: 'Menyimpan produk...',
+      success: 'Produk berhasil disimpan!',
+      error: (err) => `Gagal menyimpan: ${err.message}`,
+    });
+  };
+
+  const handleDeleteProduct = (productId) => {
+    setConfirmState({
+      isOpen: true,
+      title: 'Hapus Produk',
+      message: 'Apakah Anda yakin ingin menghapus produk ini? Tindakan ini tidak dapat diurungkan.',
+      onConfirm: () => {
+        const promise = new Promise(async (resolve, reject) => {
+          try {
+            await supabase.from('products').delete().eq('id', productId);
+            await db.products.delete(productId);
+            resolve();
+          } catch(error) {
+            reject(error);
+          }
+        });
+        toast.promise(promise, {
+          loading: 'Menghapus produk...',
+          success: 'Produk berhasil dihapus!',
+          error: (err) => `Gagal menghapus: ${err.message}`,
+        });
+      }
+    });
+  };
+  
+  const handleSaveCategory = (categoryData) => {
+    const promise = new Promise(async (resolve, reject) => {
+      try {
+        if (selectedCategory) {
+          const { data, error } = await supabase.from('categories').update({ name: categoryData.name }).eq('id', selectedCategory.id).select().single();
+          if (error) throw error;
+          await db.categories.put(data);
+        } else {
+          const { data, error } = await supabase.from('categories').insert({ name: categoryData.name }).select().single();
+          if (error) throw error;
+          await db.categories.put(data);
+        }
+        closeCategoryModal();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    toast.promise(promise, {
+      loading: 'Menyimpan kategori...',
+      success: 'Kategori berhasil disimpan!',
+      error: (err) => `Gagal menyimpan: ${err.message}`,
+    });
+  };
+
+  const handleDeleteCategory = (categoryId) => {
+    setConfirmState({
+      isOpen: true,
+      title: 'Hapus Kategori',
+      message: 'Menghapus kategori akan membuat produk terkait menjadi "Tanpa Kategori". Lanjutkan?',
+      onConfirm: () => {
+        const promise = new Promise(async (resolve, reject) => {
+          try {
+            await supabase.from('categories').delete().eq('id', categoryId);
+            await db.categories.delete(categoryId);
+            resolve();
+          } catch(error) {
+            reject(error);
+          }
+        });
+        toast.promise(promise, {
+          loading: 'Menghapus kategori...',
+          success: 'Kategori berhasil dihapus!',
+          error: (err) => `Gagal menghapus: ${err.message}`,
+        });
+      }
+    });
+  };
+  
   const handleConfirmPayment = async () => {
     if (cart.length === 0 || !session?.user) return;
     const transactionId = crypto.randomUUID();
@@ -202,11 +301,16 @@ export default function App() {
       setIsPaymentModalOpen(false);
       setIsCartVisible(false);
       await syncToSupabase();
+      toast.success('Transaksi berhasil!');
     } catch (error) {
       console.error('Checkout failed:', error);
-      alert('Gagal menyimpan transaksi lokal.');
+      toast.error('Gagal menyimpan transaksi lokal.');
     }
   };
+
+  // --- FUNGSI-FUNGSI LAINNYA ---
+  const handleLogout = async () => { await supabase.auth.signOut(); };
+  const handleInitiateCheckout = () => { if (cart.length > 0) setIsPaymentModalOpen(true); };
   const handleViewTransactionDetails = async (transaction) => {
     try {
       const items = await db.transaction_items.where('transaction_id').equals(transaction.id).toArray();
@@ -217,7 +321,7 @@ export default function App() {
       setViewingTransaction({ ...transaction, items: itemsWithProductNames });
     } catch (error) {
       console.error("Gagal mengambil detail transaksi:", error);
-      alert("Tidak bisa memuat detail transaksi.");
+      toast.error("Tidak bisa memuat detail transaksi.");
     }
   };
   const handleCloseTransactionDetails = () => { setViewingTransaction(null); };
@@ -231,63 +335,8 @@ export default function App() {
   const updateQuantity = (productId, amount) => {
     setCart(currentCart => currentCart.map(item => item.id === productId ? { ...item, quantity: item.quantity + amount } : item).filter(item => item.quantity > 0));
   };
-  const handleSaveProduct = async (productData) => {
-    try {
-      let savedProduct;
-      if (selectedProduct) {
-        const { data, error } = await supabase.from('products').update(productData).eq('id', selectedProduct.id).select().single();
-        if (error) throw error;
-        savedProduct = data;
-        await db.products.put(savedProduct);
-      } else {
-        const { data, error } = await supabase.from('products').insert(productData).select().single();
-        if (error) throw error;
-        savedProduct = data;
-        await db.products.add(savedProduct);
-      }
-      closeModal();
-    } catch (error) {
-      alert(`Error: ${error.message}`);
-    }
-  };
-  const handleDeleteProduct = async (productId) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus produk ini?')) {
-      try {
-        await supabase.from('products').delete().eq('id', productId);
-        await db.products.delete(productId);
-      } catch (error) {
-        alert(`Error: ${error.message}`);
-      }
-    }
-  };
   const openModal = (product = null) => { setSelectedProduct(product); setIsModalOpen(true); };
   const closeModal = () => { setIsModalOpen(false); setSelectedProduct(null); };
-  const handleSaveCategory = async (categoryData) => {
-    try {
-      if (selectedCategory) {
-        const { data, error } = await supabase.from('categories').update({ name: categoryData.name }).eq('id', selectedCategory.id).select().single();
-        if (error) throw error;
-        await db.categories.put(data);
-      } else {
-        const { data, error } = await supabase.from('categories').insert({ name: categoryData.name }).select().single();
-        if (error) throw error;
-        await db.categories.put(data);
-      }
-      closeCategoryModal();
-    } catch (error) {
-      alert(`Error: ${error.message}`);
-    }
-  };
-  const handleDeleteCategory = async (categoryId) => {
-    if (window.confirm('Menghapus kategori akan membuat produk terkait menjadi "Tanpa Kategori". Lanjutkan?')) {
-      try {
-        await supabase.from('categories').delete().eq('id', categoryId);
-        await db.categories.delete(categoryId);
-      } catch (error) {
-        alert(`Error: ${error.message}`);
-      }
-    }
-  };
   const openCategoryModal = (category = null) => { setSelectedCategory(category); setIsCategoryModalOpen(true); };
   const closeCategoryModal = () => { setIsCategoryModalOpen(false); setSelectedCategory(null); };
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -317,6 +366,13 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 font-sans">
+      <Toaster 
+        position="top-center"
+        reverseOrder={false}
+        toastOptions={{
+          className: 'dark:bg-gray-700 dark:text-white',
+        }}
+      />
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout} user={session.user} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header currentView={currentView} />
@@ -363,6 +419,13 @@ export default function App() {
         {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
         {isPaymentModalOpen && ( <PaymentModal total={total} onConfirm={handleConfirmPayment} onClose={() => setIsPaymentModalOpen(false)} /> )}
         {isCategoryModalOpen && ( <CategoryFormModal category={selectedCategory} onSave={handleSaveCategory} onClose={closeCategoryModal} /> )}
+        <ConfirmationModal 
+          isOpen={confirmState.isOpen}
+          onClose={() => setConfirmState({ ...confirmState, isOpen: false })}
+          onConfirm={confirmState.onConfirm}
+          title={confirmState.title}
+          message={confirmState.message}
+        />
       </AnimatePresence>
 
       {syncProgress.active && ( <SyncProgressModal progress={(syncProgress.count / syncProgress.total) * 100} count={syncProgress.count} total={syncProgress.total} /> )}

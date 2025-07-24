@@ -1,5 +1,7 @@
 import React from 'react';
 import SalesChart from '../components/SalesChart';
+import EmptyState from '../components/EmptyState';
+import { TrendingUp } from 'lucide-react';
 
 const ReportsView = ({ reportData, reportPeriod, setReportPeriod, isInitialSyncComplete }) => {
   const { stats, topProducts, chartData } = reportData;
@@ -70,7 +72,11 @@ const ReportsView = ({ reportData, reportPeriod, setReportPeriod, isInitialSyncC
             ))}
           </ol>
         ) : (
-          <p className="text-gray-500 dark:text-gray-400">Belum ada produk yang terjual pada periode ini.</p>
+          <EmptyState 
+            icon={TrendingUp}
+            title="Belum Ada Penjualan"
+            message="Data produk terlaris akan muncul di sini setelah ada penjualan."
+          />
         )}
       </div>
     </div>

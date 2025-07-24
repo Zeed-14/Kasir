@@ -1,5 +1,6 @@
 import React from 'react';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
+import { Plus, Edit, Trash2, List } from 'lucide-react';
 
 const CategoryManagementView = ({ categories, onAdd, onEdit, onDelete }) => {
   return (
@@ -13,7 +14,11 @@ const CategoryManagementView = ({ categories, onAdd, onEdit, onDelete }) => {
       </div>
       <div className="overflow-y-auto h-[calc(100vh-200px)]">
         {(!categories || categories.length === 0) ? (
-          <p className="text-center text-gray-500 dark:text-gray-400 mt-16">Belum ada kategori. Silakan tambahkan.</p>
+          <EmptyState 
+            icon={List}
+            title="Belum Ada Kategori"
+            message="Silakan tambahkan kategori baru untuk mengelompokkan produk Anda."
+          />
         ) : (
           <ul className="divide-y dark:divide-gray-700">
             {categories.map(cat => (

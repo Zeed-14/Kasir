@@ -1,4 +1,6 @@
 import React from 'react';
+import EmptyState from '../components/EmptyState';
+import { ScrollText } from 'lucide-react';
 
 const TransactionsView = ({ transactions, onViewDetails }) => {
   return (
@@ -6,10 +8,11 @@ const TransactionsView = ({ transactions, onViewDetails }) => {
       <h2 className="text-3xl font-bold mb-6 dark:text-white">Riwayat Transaksi</h2>
       <div className="overflow-y-auto h-[calc(100vh-200px)]">
         {(!transactions || transactions.length === 0) ? (
-          <div className="text-center text-gray-500 dark:text-gray-400 mt-16">
-            <p>Tidak ada riwayat transaksi.</p>
-            <p className="text-sm mt-2">Silakan selesaikan penjualan di halaman kasir.</p>
-          </div>
+          <EmptyState 
+            icon={ScrollText}
+            title="Tidak Ada Riwayat"
+            message="Belum ada transaksi yang tercatat."
+          />
         ) : (
           <ul className="divide-y dark:divide-gray-700">
             {transactions.map(tx => (
