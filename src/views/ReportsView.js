@@ -21,24 +21,15 @@ const ReportsView = ({ reportData, reportPeriod, setReportPeriod, isInitialSyncC
 
   if (!isInitialSyncComplete) {
     return (
-      <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center text-gray-500 dark:text-gray-400">
+      <div className="max-w-7xl mx-auto w-full bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center text-gray-500 dark:text-gray-400">
         <h2 className="text-2xl font-bold mb-4 dark:text-white">Laporan Penjualan</h2>
         <p>Menyinkronkan data dari cloud...</p>
       </div>
     );
   }
-
-  if (!stats) {
-    return (
-      <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center text-gray-500 dark:text-gray-400">
-        <h2 className="text-2xl font-bold mb-4 dark:text-white">Laporan Penjualan</h2>
-        <p>Menghitung laporan...</p>
-      </div>
-    );
-  }
-
+  
   return (
-    <div className="w-full space-y-6">
+    <div className="max-w-7xl mx-auto w-full space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <h2 className="text-3xl font-bold dark:text-white">Laporan Penjualan</h2>
         <div className="flex items-center gap-2">
@@ -48,13 +39,13 @@ const ReportsView = ({ reportData, reportPeriod, setReportPeriod, isInitialSyncC
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-blue-100 dark:bg-blue-900/50 p-6 rounded-lg">
-          <p className="text-blue-800 dark:text-blue-200 font-semibold">Total Pendapatan</p>
-          <p className="text-4xl font-bold text-blue-900 dark:text-blue-100">Rp {stats.totalRevenue.toLocaleString('id-ID')}</p>
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+          <p className="text-gray-500 dark:text-gray-400 font-semibold">Total Pendapatan</p>
+          <p className="text-4xl font-bold text-gray-800 dark:text-white mt-1">Rp {stats.totalRevenue.toLocaleString('id-ID')}</p>
         </div>
-        <div className="bg-green-100 dark:bg-green-900/50 p-6 rounded-lg">
-          <p className="text-green-800 dark:text-green-200 font-semibold">Jumlah Transaksi</p>
-          <p className="text-4xl font-bold text-green-900 dark:text-green-100">{stats.transactionCount}</p>
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+          <p className="text-gray-500 dark:text-gray-400 font-semibold">Jumlah Transaksi</p>
+          <p className="text-4xl font-bold text-gray-800 dark:text-white mt-1">{stats.transactionCount}</p>
         </div>
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">

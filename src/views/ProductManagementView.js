@@ -3,7 +3,7 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 
 const ProductManagementView = ({ products, onAdd, onEdit, onDelete }) => {
   return (
-    <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <div className="max-w-7xl mx-auto w-full bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold dark:text-white">Manajemen Produk</h2>
         <button onClick={onAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
@@ -11,9 +11,9 @@ const ProductManagementView = ({ products, onAdd, onEdit, onDelete }) => {
           <span>Tambah Produk</span>
         </button>
       </div>
-      <div className="overflow-y-auto h-[calc(100vh-200px)]">
+      <div className="overflow-x-auto">
         <table className="w-full text-left">
-          <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
+          <thead className="bg-gray-100 dark:bg-gray-700">
             <tr>
               <th className="p-3">Nama Produk</th>
               <th className="p-3">Harga</th>
@@ -28,7 +28,6 @@ const ProductManagementView = ({ products, onAdd, onEdit, onDelete }) => {
                 <td className="p-3">Rp {Number(p.price).toLocaleString('id-ID')}</td>
                 <td className="p-3">{p.stock}</td>
                 <td className="p-3 text-right">
-                  {/* --- PERBAIKAN DI SINI: Ganti teks dengan komponen ikon --- */}
                   <button onClick={() => onEdit(p)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mr-4 p-1">
                     <Edit size={20} />
                   </button>

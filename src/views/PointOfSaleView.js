@@ -2,9 +2,9 @@ import React from 'react';
 import ProductSkeleton from '../components/ProductSkeleton';
 import EmptyState from '../components/EmptyState';
 import { X, ShoppingCart, Search } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, cart, addToCart, updateQuantity, total, onInitiateCheckout, searchTerm, setSearchTerm, isMobile, isCartVisible, setIsCartVisible }) => {
+const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCategoryId, cart, addToCart, updateQuantity, total, onInitiateCheckout, searchTerm, setSearchTerm, isMobile, isCartVisible, setIsCartVisible }) => {
   
   const filteredProducts = products?.filter(p => {
     const matchesCategory = activeCategoryId === 'all' ? true : p.category_id === activeCategoryId;
@@ -27,58 +27,56 @@ const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, 
     visible: { y: 0, opacity: 1 }
   };
 
-  const Cart = () => (
-    <div className={`
-      ${isMobile ? 'fixed inset-y-0 right-0 z-30 w-full max-w-sm bg-white dark:bg-gray-800 shadow-2xl transform transition-transform duration-300' : 'relative w-full bg-white dark:bg-gray-800 rounded-lg shadow'}
-      ${isMobile && !isCartVisible ? 'translate-x-full' : 'translate-x-0'}
-    `}>
-      <div className="flex flex-col h-full">
-        <div className="p-4 flex justify-between items-center border-b dark:border-gray-700">
-          <h2 className="text-2xl font-bold dark:text-white">Keranjang</h2>
-          {isMobile && (
-            <button onClick={() => setIsCartVisible(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-              <X size={24} />
-            </button>
-          )}
-        </div>
-        <div className="flex-1 p-4 overflow-y-auto">
-          {cart.length === 0 ? (
-            <EmptyState 
-              icon={ShoppingCart}
-              title="Keranjang Kosong"
-              message="Pilih produk untuk memulai transaksi."
-            />
-          ) : (
-            cart.map(item => (
-              <div key={item.id} className="flex justify-between items-center mb-4">
-                <div>
-                  <p className="font-semibold dark:text-white">{item.name}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Rp {Number(item.price).toLocaleString('id-ID')}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => updateQuantity(item.id, -1)} className="bg-gray-200 dark:bg-gray-600 w-7 h-7 rounded-md">-</button>
-                  <span className="font-semibold">{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)} className="bg-gray-200 dark:bg-gray-600 w-7 h-7 rounded-md">+</button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-          <div className="flex justify-between font-bold text-xl mb-4">
-            <span>Total</span>
-            <span>Rp {total.toLocaleString('id-ID')}</span>
-          </div>
-          <button onClick={onInitiateCheckout} disabled={cart.length === 0} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-lg font-semibold">
-            Bayar
+  // Kita definisikan konten keranjang di sini agar bisa dipakai ulang
+  const CartContent = () => (
+    <div className="flex flex-col h-full">
+      <div className="p-4 flex justify-between items-center border-b dark:border-gray-700">
+        <h2 className="text-2xl font-bold dark:text-white">Keranjang</h2>
+        {/* Tombol tutup hanya muncul di mode mobile (saat jadi modal) */}
+        {isMobile && (
+          <button onClick={() => setIsCartVisible(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+            <X size={24} />
           </button>
+        )}
+      </div>
+      <div className="flex-1 p-4 overflow-y-auto">
+        {cart.length === 0 ? (
+          <EmptyState 
+            icon={ShoppingCart}
+            title="Keranjang Kosong"
+            message="Pilih produk untuk memulai transaksi."
+          />
+        ) : (
+          cart.map(item => (
+            <div key={item.id} className="flex justify-between items-center mb-4">
+              <div>
+                <p className="font-semibold dark:text-white">{item.name}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Rp {Number(item.price).toLocaleString('id-ID')}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => updateQuantity(item.id, -1)} className="bg-gray-200 dark:bg-gray-600 w-7 h-7 rounded-md">-</button>
+                <span className="font-semibold">{item.quantity}</span>
+                <button onClick={() => updateQuantity(item.id, 1)} className="bg-gray-200 dark:bg-gray-600 w-7 h-7 rounded-md">+</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="flex justify-between font-bold text-xl mb-4">
+          <span>Total</span>
+          <span>Rp {total.toLocaleString('id-ID')}</span>
         </div>
+        <button onClick={onInitiateCheckout} disabled={cart.length === 0} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-lg font-semibold">
+          Bayar
+        </button>
       </div>
     </div>
   );
 
   return (
     <>
+      {/* Daftar Produk (Tidak Berubah) */}
       <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col">
         <div className="mb-4">
           <h1 className="text-3xl font-bold dark:text-white">Pilih Produk</h1>
@@ -148,10 +146,40 @@ const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, 
           </div>
         )}
       </div>
-      <div className={`transition-all duration-300 ${isMobile ? 'w-0' : 'w-1/3'}`}>
-        {!isMobile && <Cart />}
-      </div>
-      {isMobile && <Cart />}
+
+      {/* --- BAGIAN KERANJANG (DIPERBARUI) --- */}
+      {!isMobile ? (
+        // Tampilan Desktop: Panel di sebelah kanan
+        <div className="w-1/3 bg-white dark:bg-gray-800 rounded-lg shadow">
+          <CartContent />
+        </div>
+      ) : (
+        // Tampilan Mobile: Modal Overlay di Tengah
+        <AnimatePresence>
+          {isCartVisible && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-30 p-4"
+              onClick={() => setIsCartVisible(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.9, y: 20, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-md h-3/4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CartContent />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+
+      {/* Tombol Apung (Tidak Berubah) */}
       {!isCartVisible && isMobile && (
         <button 
           onClick={() => setIsCartVisible(true)}
@@ -167,4 +195,4 @@ const POSView = ({ products, categories, activeCategoryId, setActiveCategoryId, 
   );
 };
 
-export default POSView;
+export default PointOfSaleView;

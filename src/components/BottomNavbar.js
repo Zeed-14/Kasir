@@ -1,6 +1,7 @@
+// src/components/BottomNavbar.js
+
 import React from 'react';
-import { LayoutGrid, ScrollText, Package, BarChart3, List, LogOut, Sun, Moon } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { LayoutDashboard, ShoppingCart, BarChart3, Truck, Settings } from 'lucide-react';
 
 const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   <button 
@@ -12,15 +13,13 @@ const NavButton = ({ icon: Icon, label, isActive, onClick }) => (
   </button>
 );
 
-const BottomNavbar = ({ currentView, setCurrentView, user, onLogout }) => {
-  const { theme, toggleTheme } = useTheme();
-
+const BottomNavbar = ({ currentView, setCurrentView }) => {
   const navItems = [
-    { id: 'pos', label: 'Kasir', icon: LayoutGrid },
-    { id: 'transactions', label: 'Riwayat', icon: ScrollText },
-    { id: 'products', label: 'Produk', icon: Package },
-    { id: 'categories', label: 'Kategori', icon: List },
-    { id: 'reports', label: 'Laporan', icon: BarChart3 },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'kasir', label: 'Kasir', icon: ShoppingCart },
+    { id: 'laporan', label: 'Laporan', icon: BarChart3 },
+    { id: 'suplier', label: 'Suplier', icon: Truck },
+    { id: 'pengaturan', label: 'Atur', icon: Settings },
   ];
 
   return (
@@ -34,12 +33,6 @@ const BottomNavbar = ({ currentView, setCurrentView, user, onLogout }) => {
           onClick={() => setCurrentView(item.id)}
         />
       ))}
-      <NavButton 
-        icon={theme === 'light' ? Moon : Sun}
-        label={theme === 'light' ? 'Gelap' : 'Terang'}
-        onClick={toggleTheme}
-      />
-      <NavButton icon={LogOut} label="Keluar" onClick={onLogout} />
     </nav>
   );
 };

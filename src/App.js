@@ -11,25 +11,23 @@ import BottomNavbar from './components/BottomNavbar';
 import ProductFormModal from './components/ProductFormModal';
 import TransactionDetailModal from './components/TransactionDetailModal';
 import PaymentModal from './components/PaymentModal';
-import POSView from './views/POSView';
-import TransactionsView from './views/TransactionsView';
-import ProductManagementView from './views/ProductManagementView';
-import ReportsView from './views/ReportsView';
-import DebugInfoPanel from './components/DebugInfoPanel';
+import KasirView from './views/KasirView';
+import LaporanView from './views/LaporanView';
+import PengaturanView from './views/PengaturanView';
 import SyncProgressModal from './components/SyncProgressModal';
 import DebugConsole from './components/DebugConsole';
-import CategoryManagementView from './views/CategoryManagementView';
 import AuthView from './views/AuthView';
 import InstallPWAButton from './components/InstallPWAButton';
 import CategoryFormModal from './components/CategoryFormModal';
 import ConfirmationModal from './components/ConfirmationModal';
+// Hapus import DebugInfoPanel karena sudah tidak digunakan
 
 export default function App() {
   // --- STATE ---
   const [session, setSession] = useState(null);
   const [cart, setCart] = useState([]);
   const [syncStatus, setSyncStatus] = useState('Idle');
-  const [currentView, setCurrentView] = useState('pos');
+  const [currentView, setCurrentView] = useState('kasir');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -184,105 +182,9 @@ export default function App() {
     return { stats: { totalRevenue, transactionCount }, topProducts, chartData };
   }, [transactions, transactionItems, products, reportPeriod, isInitialSyncComplete]);
 
-  // --- LOGIKA CRUD DENGAN NOTIFIKASI BARU ---
-  const handleSaveProduct = (productData) => {
-    const promise = new Promise(async (resolve, reject) => {
-      try {
-        if (selectedProduct) {
-          const { data, error } = await supabase.from('products').update(productData).eq('id', selectedProduct.id).select().single();
-          if (error) throw error;
-          await db.products.put(data);
-        } else {
-          const { data, error } = await supabase.from('products').insert(productData).select().single();
-          if (error) throw error;
-          await db.products.add(data);
-        }
-        closeModal();
-        resolve();
-      } catch (error) {
-        reject(error);
-      }
-    });
-    toast.promise(promise, {
-      loading: 'Menyimpan produk...',
-      success: 'Produk berhasil disimpan!',
-      error: (err) => `Gagal menyimpan: ${err.message}`,
-    });
-  };
-
-  const handleDeleteProduct = (productId) => {
-    setConfirmState({
-      isOpen: true,
-      title: 'Hapus Produk',
-      message: 'Apakah Anda yakin ingin menghapus produk ini? Tindakan ini tidak dapat diurungkan.',
-      onConfirm: () => {
-        const promise = new Promise(async (resolve, reject) => {
-          try {
-            await supabase.from('products').delete().eq('id', productId);
-            await db.products.delete(productId);
-            resolve();
-          } catch(error) {
-            reject(error);
-          }
-        });
-        toast.promise(promise, {
-          loading: 'Menghapus produk...',
-          success: 'Produk berhasil dihapus!',
-          error: (err) => `Gagal menghapus: ${err.message}`,
-        });
-      }
-    });
-  };
-  
-  const handleSaveCategory = (categoryData) => {
-    const promise = new Promise(async (resolve, reject) => {
-      try {
-        if (selectedCategory) {
-          const { data, error } = await supabase.from('categories').update({ name: categoryData.name }).eq('id', selectedCategory.id).select().single();
-          if (error) throw error;
-          await db.categories.put(data);
-        } else {
-          const { data, error } = await supabase.from('categories').insert({ name: categoryData.name }).select().single();
-          if (error) throw error;
-          await db.categories.put(data);
-        }
-        closeCategoryModal();
-        resolve();
-      } catch (error) {
-        reject(error);
-      }
-    });
-    toast.promise(promise, {
-      loading: 'Menyimpan kategori...',
-      success: 'Kategori berhasil disimpan!',
-      error: (err) => `Gagal menyimpan: ${err.message}`,
-    });
-  };
-
-  const handleDeleteCategory = (categoryId) => {
-    setConfirmState({
-      isOpen: true,
-      title: 'Hapus Kategori',
-      message: 'Menghapus kategori akan membuat produk terkait menjadi "Tanpa Kategori". Lanjutkan?',
-      onConfirm: () => {
-        const promise = new Promise(async (resolve, reject) => {
-          try {
-            await supabase.from('categories').delete().eq('id', categoryId);
-            await db.categories.delete(categoryId);
-            resolve();
-          } catch(error) {
-            reject(error);
-          }
-        });
-        toast.promise(promise, {
-          loading: 'Menghapus kategori...',
-          success: 'Kategori berhasil dihapus!',
-          error: (err) => `Gagal menghapus: ${err.message}`,
-        });
-      }
-    });
-  };
-  
+  // --- FUNGSI-FUNGSI ---
+  const handleLogout = async () => { await supabase.auth.signOut(); };
+  const handleInitiateCheckout = () => { if (cart.length > 0) setIsPaymentModalOpen(true); };
   const handleConfirmPayment = async () => {
     if (cart.length === 0 || !session?.user) return;
     const transactionId = crypto.randomUUID();
@@ -307,10 +209,6 @@ export default function App() {
       toast.error('Gagal menyimpan transaksi lokal.');
     }
   };
-
-  // --- FUNGSI-FUNGSI LAINNYA ---
-  const handleLogout = async () => { await supabase.auth.signOut(); };
-  const handleInitiateCheckout = () => { if (cart.length > 0) setIsPaymentModalOpen(true); };
   const handleViewTransactionDetails = async (transaction) => {
     try {
       const items = await db.transaction_items.where('transaction_id').equals(transaction.id).toArray();
@@ -335,8 +233,86 @@ export default function App() {
   const updateQuantity = (productId, amount) => {
     setCart(currentCart => currentCart.map(item => item.id === productId ? { ...item, quantity: item.quantity + amount } : item).filter(item => item.quantity > 0));
   };
+  const handleSaveProduct = (productData) => {
+    const promise = new Promise(async (resolve, reject) => {
+      try {
+        if (selectedProduct) {
+          const { data, error } = await supabase.from('products').update(productData).eq('id', selectedProduct.id).select().single();
+          if (error) throw error;
+          await db.products.put(data);
+        } else {
+          const { data, error } = await supabase.from('products').insert(productData).select().single();
+          if (error) throw error;
+          await db.products.add(data);
+        }
+        closeModal();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    toast.promise(promise, { loading: 'Menyimpan produk...', success: 'Produk berhasil disimpan!', error: (err) => `Gagal menyimpan: ${err.message}` });
+  };
+  const handleDeleteProduct = (productId) => {
+    setConfirmState({
+      isOpen: true,
+      title: 'Hapus Produk',
+      message: 'Apakah Anda yakin ingin menghapus produk ini? Tindakan ini tidak dapat diurungkan.',
+      onConfirm: () => {
+        const promise = new Promise(async (resolve, reject) => {
+          try {
+            await supabase.from('products').delete().eq('id', productId);
+            await db.products.delete(productId);
+            resolve();
+          } catch(error) {
+            reject(error);
+          }
+        });
+        toast.promise(promise, { loading: 'Menghapus produk...', success: 'Produk berhasil dihapus!', error: (err) => `Gagal menghapus: ${err.message}` });
+      }
+    });
+  };
   const openModal = (product = null) => { setSelectedProduct(product); setIsModalOpen(true); };
   const closeModal = () => { setIsModalOpen(false); setSelectedProduct(null); };
+  const handleSaveCategory = (categoryData) => {
+    const promise = new Promise(async (resolve, reject) => {
+      try {
+        if (selectedCategory) {
+          const { data, error } = await supabase.from('categories').update({ name: categoryData.name }).eq('id', selectedCategory.id).select().single();
+          if (error) throw error;
+          await db.categories.put(data);
+        } else {
+          const { data, error } = await supabase.from('categories').insert({ name: categoryData.name }).select().single();
+          if (error) throw error;
+          await db.categories.put(data);
+        }
+        closeCategoryModal();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    toast.promise(promise, { loading: 'Menyimpan kategori...', success: 'Kategori berhasil disimpan!', error: (err) => `Gagal menyimpan: ${err.message}` });
+  };
+  const handleDeleteCategory = (categoryId) => {
+    setConfirmState({
+      isOpen: true,
+      title: 'Hapus Kategori',
+      message: 'Menghapus kategori akan membuat produk terkait menjadi "Tanpa Kategori". Lanjutkan?',
+      onConfirm: () => {
+        const promise = new Promise(async (resolve, reject) => {
+          try {
+            await supabase.from('categories').delete().eq('id', categoryId);
+            await db.categories.delete(categoryId);
+            resolve();
+          } catch(error) {
+            reject(error);
+          }
+        });
+        toast.promise(promise, { loading: 'Menghapus kategori...', success: 'Kategori berhasil dihapus!', error: (err) => `Gagal menghapus: ${err.message}` });
+      }
+    });
+  };
   const openCategoryModal = (category = null) => { setSelectedCategory(category); setIsCategoryModalOpen(true); };
   const closeCategoryModal = () => { setIsCategoryModalOpen(false); setSelectedCategory(null); };
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -366,16 +342,17 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 font-sans">
-      <Toaster 
-        position="top-center"
-        reverseOrder={false}
-        toastOptions={{
-          className: 'dark:bg-gray-700 dark:text-white',
-        }}
-      />
-      <Sidebar currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout} user={session.user} />
+      <Toaster position="top-center" reverseOrder={false} toastOptions={{ className: 'dark:bg-gray-700 dark:text-white' }} />
+      <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header currentView={currentView} />
+        <Header 
+          currentView={currentView}
+          user={session.user}
+          onLogout={handleLogout}
+          syncStatus={syncStatus}
+          onManualSync={syncToSupabase}
+          onOpenConsole={() => setIsConsoleVisible(true)}
+        />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
           <AnimatePresence mode="wait">
             <motion.div
@@ -385,9 +362,10 @@ export default function App() {
               exit="out"
               variants={pageVariants}
               transition={pageTransition}
+              className="h-full"
             >
-              {currentView === 'pos' && ( 
-                <POSView 
+              {currentView === 'kasir' && ( 
+                <KasirView 
                   products={products}
                   cart={cart}
                   addToCart={addToCart}
@@ -402,12 +380,29 @@ export default function App() {
                   setActiveCategoryId={setActiveCategoryId}
                   searchTerm={searchTerm}
                   setSearchTerm={setSearchTerm}
+                  onAddProduct={() => openModal()}
+                  onEditProduct={openModal}
+                  onDeleteProduct={handleDeleteProduct}
                 /> 
               )}
-              {currentView === 'transactions' && ( <TransactionsView transactions={transactions} onViewDetails={handleViewTransactionDetails} /> )}
-              {currentView === 'products' && ( <ProductManagementView products={products} onAdd={() => openModal()} onEdit={openModal} onDelete={handleDeleteProduct} /> )}
-              {currentView === 'categories' && ( <CategoryManagementView categories={categories} onAdd={openCategoryModal} onEdit={openCategoryModal} onDelete={handleDeleteCategory} /> )}
-              {currentView === 'reports' && ( <ReportsView reportData={reportData} reportPeriod={reportPeriod} setReportPeriod={setReportPeriod} isInitialSyncComplete={isInitialSyncComplete} /> )}
+              {currentView === 'laporan' && (
+                <LaporanView
+                  reportData={reportData}
+                  reportPeriod={reportPeriod}
+                  setReportPeriod={setReportPeriod}
+                  isInitialSyncComplete={isInitialSyncComplete}
+                  transactions={transactions}
+                  onViewDetails={handleViewTransactionDetails}
+                />
+              )}
+              {currentView === 'pengaturan' && (
+                <PengaturanView
+                  categories={categories}
+                  onAddCategory={openCategoryModal}
+                  onEditCategory={openCategoryModal}
+                  onDeleteCategory={handleDeleteCategory}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -430,9 +425,7 @@ export default function App() {
 
       {syncProgress.active && ( <SyncProgressModal progress={(syncProgress.count / syncProgress.total) * 100} count={syncProgress.count} total={syncProgress.total} /> )}
       {isConsoleVisible && <DebugConsole onClose={() => setIsConsoleVisible(false)} />}
-      <div onDoubleClick={() => setIsConsoleVisible(true)}>
-        <DebugInfoPanel status={syncStatus} onManualSync={syncToSupabase} />
-      </div>
+      
       {installPrompt && <InstallPWAButton onInstall={handleInstallClick} />}
     </div>
   );
