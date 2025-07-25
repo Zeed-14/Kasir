@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../db';
 import { ShoppingBag } from 'lucide-react';
 
@@ -9,20 +9,38 @@ const AuthView = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  // --- STATE BARU: Untuk menyimpan pengaturan toko ---
+  const [settings, setSettings] = useState(null);
+
+  // --- EFEK BARU: Ambil data pengaturan toko saat komponen dimuat ---
+  useEffect(() => {
+    const fetchStoreSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('store_settings')
+          .select('*')
+          .eq('id', 1)
+          .single();
+        
+        if (error) throw error;
+        setSettings(data);
+      } catch (err) {
+        console.error("Gagal mengambil pengaturan toko:", err.message);
+      }
+    };
+    fetchStoreSettings();
+  }, []);
 
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setMessage('');
-
     try {
       if (isLogin) {
-        // Proses Login
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        // Proses Pendaftaran
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         setMessage('Pendaftaran berhasil! Silakan cek email Anda untuk verifikasi.');
@@ -38,10 +56,16 @@ const AuthView = () => {
     <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
       <div className="w-full max-w-md p-8 space-y-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
         <div className="flex flex-col items-center space-y-2">
+          {/* --- LOGO DINAMIS --- */}
           <div className="bg-blue-600 p-3 rounded-xl text-white">
-            <ShoppingBag size={40} />
+            {settings?.logo_url ? (
+              <img src={settings.logo_url} alt="Logo Toko" className="w-10 h-10 object-contain" />
+            ) : (
+              <ShoppingBag size={40} />
+            )}
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Selamat Datang di KasirKu</h1>
+          {/* --- NAMA TOKO DINAMIS --- */}
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Selamat Datang di {settings?.name || 'KasirKu'}</h1>
           <p className="text-gray-500 dark:text-gray-400">{isLogin ? 'Silakan masuk untuk melanjutkan' : 'Buat akun baru'}</p>
         </div>
 

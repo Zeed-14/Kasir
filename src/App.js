@@ -14,20 +14,24 @@ import PaymentModal from './components/PaymentModal';
 import KasirView from './views/KasirView';
 import LaporanView from './views/LaporanView';
 import PengaturanView from './views/PengaturanView';
+import DashboardView from './views/DashboardView';
+import SuplierView from './views/SuplierView';
 import SyncProgressModal from './components/SyncProgressModal';
 import DebugConsole from './components/DebugConsole';
 import AuthView from './views/AuthView';
 import InstallPWAButton from './components/InstallPWAButton';
 import CategoryFormModal from './components/CategoryFormModal';
 import ConfirmationModal from './components/ConfirmationModal';
-// Hapus import DebugInfoPanel karena sudah tidak digunakan
+import SupplierFormModal from './components/SupplierFormModal';
+
+const PRODUCTS_PER_PAGE = 20;
 
 export default function App() {
   // --- STATE ---
   const [session, setSession] = useState(null);
   const [cart, setCart] = useState([]);
   const [syncStatus, setSyncStatus] = useState('Idle');
-  const [currentView, setCurrentView] = useState('kasir');
+  const [currentView, setCurrentView] = useState('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,6 +48,11 @@ export default function App() {
   const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [confirmState, setConfirmState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [storeSettings, setStoreSettings] = useState(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [visibleProductsCount, setVisibleProductsCount] = useState(PRODUCTS_PER_PAGE);
 
   // --- EFEK ---
   useEffect(() => {
@@ -68,10 +77,30 @@ export default function App() {
   }, []);
 
   // --- DATA DARI INDEXEDDB ---
-  const products = useLiveQuery(() => db.products.orderBy('name').toArray(), []);
+  const allProducts = useLiveQuery(() => db.products.orderBy('name').toArray(), []);
   const categories = useLiveQuery(() => db.categories.orderBy('name').toArray(), []);
+  const supliers = useLiveQuery(() => db.suppliers.orderBy('name').toArray(), []);
   const transactions = useLiveQuery(() => db.transactions.orderBy('transaction_time').reverse().toArray(), []);
   const transactionItems = useLiveQuery(() => db.transaction_items.toArray(), []);
+  const settingsData = useLiveQuery(() => db.store_settings.get(1), []);
+  useEffect(() => {
+    if(settingsData) setStoreSettings(settingsData);
+  }, [settingsData]);
+
+  // --- LOGIKA PAGINATION ---
+  const displayedProducts = useMemo(() => {
+    if (!allProducts) return undefined;
+    return allProducts.slice(0, visibleProductsCount);
+  }, [allProducts, visibleProductsCount]);
+
+  const hasMoreProducts = useMemo(() => {
+    if (!allProducts) return false;
+    return visibleProductsCount < allProducts.length;
+  }, [allProducts, visibleProductsCount]);
+
+  const handleShowMoreProducts = () => {
+    setVisibleProductsCount(prevCount => prevCount + PRODUCTS_PER_PAGE);
+  };
 
   // --- LOGIKA SINKRONISASI ---
   const syncFromSupabase = useCallback(async () => {
@@ -81,7 +110,10 @@ export default function App() {
       const { data: txs } = await supabase.from('transactions').select('*');
       const { data: items } = await supabase.from('transaction_items').select('*');
       const { data: cats } = await supabase.from('categories').select('*');
-      await db.transaction('rw', db.products, db.transactions, db.transaction_items, db.categories, async () => {
+      const { data: sups } = await supabase.from('suppliers').select('*');
+      const { data: settings } = await supabase.from('store_settings').select('*').eq('id', 1).single();
+      
+      await db.transaction('rw', db.products, db.transactions, db.transaction_items, db.categories, db.suppliers, db.store_settings, async () => {
         if (prods) await db.products.bulkPut(prods);
         if (txs) {
           const syncedTxs = txs.map(tx => ({ ...tx, synced: 1 }));
@@ -89,6 +121,8 @@ export default function App() {
         }
         if (items) await db.transaction_items.bulkPut(items);
         if (cats) await db.categories.bulkPut(cats);
+        if (sups) await db.suppliers.bulkPut(sups);
+        if (settings) await db.store_settings.put(settings);
       });
       setSyncStatus('Synced');
       setIsInitialSyncComplete(true);
@@ -143,7 +177,7 @@ export default function App() {
 
   // --- LOGIKA KALKULASI LAPORAN ---
   const reportData = useMemo(() => {
-    if (!isInitialSyncComplete || !transactions || !transactionItems || !products) {
+    if (!isInitialSyncComplete || !transactions || !transactionItems || !allProducts) {
       return { stats: null, topProducts: [], chartData: [] };
     }
     const endDate = new Date();
@@ -168,7 +202,7 @@ export default function App() {
     });
     const topProducts = Object.entries(productSales)
       .map(([productId, quantity]) => {
-        const product = products.find(p => p.id === productId);
+        const product = allProducts.find(p => p.id === productId);
         return { id: productId, name: product ? product.name : 'Produk Tidak Dikenal', quantity };
       })
       .sort((a, b) => b.quantity - a.quantity)
@@ -180,7 +214,7 @@ export default function App() {
     });
     const chartData = Object.entries(salesByDay).map(([name, total]) => ({ name, total })).reverse();
     return { stats: { totalRevenue, transactionCount }, topProducts, chartData };
-  }, [transactions, transactionItems, products, reportPeriod, isInitialSyncComplete]);
+  }, [transactions, transactionItems, allProducts, reportPeriod, isInitialSyncComplete]);
 
   // --- FUNGSI-FUNGSI ---
   const handleLogout = async () => { await supabase.auth.signOut(); };
@@ -213,7 +247,7 @@ export default function App() {
     try {
       const items = await db.transaction_items.where('transaction_id').equals(transaction.id).toArray();
       const itemsWithProductNames = await Promise.all(items.map(async (item) => {
-        const product = await db.products.get(item.product_id);
+        const product = allProducts.find(p => p.id === item.product_id);
         return { ...item, productName: product ? product.name : 'Produk Dihapus' };
       }));
       setViewingTransaction({ ...transaction, items: itemsWithProductNames });
@@ -315,6 +349,78 @@ export default function App() {
   };
   const openCategoryModal = (category = null) => { setSelectedCategory(category); setIsCategoryModalOpen(true); };
   const closeCategoryModal = () => { setIsCategoryModalOpen(false); setSelectedCategory(null); };
+  const handleSaveSupplier = (supplierData) => {
+    const promise = new Promise(async (resolve, reject) => {
+      try {
+        if (selectedSupplier) {
+          if (!selectedSupplier.id) throw new Error("ID Suplier tidak valid untuk diedit.");
+          const dataToUpdate = { name: supplierData.name, contact_person: supplierData.contact_person, phone: supplierData.phone, address: supplierData.address };
+          const { data, error } = await supabase.from('suppliers').update(dataToUpdate).eq('id', selectedSupplier.id).select().single();
+          if (error) throw error;
+          await db.suppliers.put(data);
+        } else {
+          const { data, error } = await supabase.from('suppliers').insert(supplierData).select().single();
+          if (error) throw error;
+          await db.suppliers.put(data);
+        }
+        closeSupplierModal();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    toast.promise(promise, { loading: 'Menyimpan suplier...', success: 'Suplier berhasil disimpan!', error: (err) => `Gagal menyimpan: ${err.message}` });
+  };
+  const handleDeleteSupplier = (supplierId) => {
+    setConfirmState({
+      isOpen: true,
+      title: 'Hapus Suplier',
+      message: 'Apakah Anda yakin ingin menghapus suplier ini? Produk yang terkait tidak akan ikut terhapus.',
+      onConfirm: () => {
+        const promise = new Promise(async (resolve, reject) => {
+          try {
+            await supabase.from('suppliers').delete().eq('id', supplierId);
+            await db.suppliers.delete(supplierId);
+            resolve();
+          } catch(error) {
+            reject(error);
+          }
+        });
+        toast.promise(promise, { loading: 'Menghapus suplier...', success: 'Suplier berhasil dihapus!', error: (err) => `Gagal menghapus: ${err.message}` });
+      }
+    });
+  };
+  const openSupplierModal = (supplier = null) => { setSelectedSupplier(supplier); setIsSupplierModalOpen(true); };
+  const closeSupplierModal = () => { setIsSupplierModalOpen(false); setSelectedSupplier(null); };
+  const handleSaveStoreSettings = async (settingsData, logoFile) => {
+    setIsSavingSettings(true);
+    const toastId = toast.loading('Menyimpan pengaturan...');
+    try {
+      let logoUrl = settingsData.logo_url;
+
+      if (logoFile) {
+        const filePath = `public/logo-${Date.now()}`;
+        const { error: uploadError } = await supabase.storage.from('logos').upload(filePath, logoFile, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(filePath);
+        logoUrl = publicUrl;
+      }
+
+      const dataToUpdate = { ...settingsData, logo_url: logoUrl, updated_at: new Date().toISOString() };
+      const { data: updatedSettings, error: dbError } = await supabase.from('store_settings').update(dataToUpdate).eq('id', 1).select().single();
+      if (dbError) throw dbError;
+      await db.store_settings.put(updatedSettings);
+      toast.success('Pengaturan berhasil disimpan!', { id: toastId });
+    } catch (error) {
+      console.error("Gagal menyimpan pengaturan:", error);
+      toast.error(`Gagal menyimpan: ${error.message}`, { id: toastId });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const handleInstallClick = async () => {
     if (!installPrompt) return;
@@ -352,6 +458,7 @@ export default function App() {
           syncStatus={syncStatus}
           onManualSync={syncToSupabase}
           onOpenConsole={() => setIsConsoleVisible(true)}
+          storeSettings={storeSettings}
         />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
           <AnimatePresence mode="wait">
@@ -364,9 +471,10 @@ export default function App() {
               transition={pageTransition}
               className="h-full"
             >
+              {currentView === 'dashboard' && ( <DashboardView user={session.user} reportData={reportData} setCurrentView={setCurrentView} /> )}
               {currentView === 'kasir' && ( 
                 <KasirView 
-                  products={products}
+                  products={displayedProducts}
                   cart={cart}
                   addToCart={addToCart}
                   updateQuantity={updateQuantity}
@@ -383,6 +491,8 @@ export default function App() {
                   onAddProduct={() => openModal()}
                   onEditProduct={openModal}
                   onDeleteProduct={handleDeleteProduct}
+                  onShowMore={handleShowMoreProducts}
+                  hasMoreProducts={hasMoreProducts}
                 /> 
               )}
               {currentView === 'laporan' && (
@@ -395,12 +505,23 @@ export default function App() {
                   onViewDetails={handleViewTransactionDetails}
                 />
               )}
+              {currentView === 'suplier' && (
+                <SuplierView 
+                  supliers={supliers}
+                  onAdd={openSupplierModal}
+                  onEdit={openSupplierModal}
+                  onDelete={handleDeleteSupplier}
+                />
+              )}
               {currentView === 'pengaturan' && (
                 <PengaturanView
                   categories={categories}
                   onAddCategory={openCategoryModal}
                   onEditCategory={openCategoryModal}
                   onDeleteCategory={handleDeleteCategory}
+                  storeSettings={storeSettings}
+                  onSaveStoreSettings={handleSaveStoreSettings}
+                  isSavingSettings={isSavingSettings}
                 />
               )}
             </motion.div>
@@ -410,10 +531,11 @@ export default function App() {
       <BottomNavbar currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout} user={session.user} />
       
       <AnimatePresence>
-        {isModalOpen && ( <ProductFormModal product={selectedProduct} categories={categories} onSave={handleSaveProduct} onClose={closeModal} /> )}
+        {isModalOpen && ( <ProductFormModal product={selectedProduct} categories={categories} supliers={supliers} onSave={handleSaveProduct} onClose={closeModal} /> )}
         {viewingTransaction && ( <TransactionDetailModal transaction={viewingTransaction} onClose={handleCloseTransactionDetails} /> )}
         {isPaymentModalOpen && ( <PaymentModal total={total} onConfirm={handleConfirmPayment} onClose={() => setIsPaymentModalOpen(false)} /> )}
         {isCategoryModalOpen && ( <CategoryFormModal category={selectedCategory} onSave={handleSaveCategory} onClose={closeCategoryModal} /> )}
+        {isSupplierModalOpen && ( <SupplierFormModal supplier={selectedSupplier} onSave={handleSaveSupplier} onClose={closeSupplierModal} /> )}
         <ConfirmationModal 
           isOpen={confirmState.isOpen}
           onClose={() => setConfirmState({ ...confirmState, isOpen: false })}

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import CategoryManagementView from './CategoryManagementView';
+import StoreSettingsView from './StoreSettingsView'; // <-- IMPORT BARU
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PengaturanView = (props) => {
-  const [subView, setSubView] = useState('categories'); // 'categories', 'users', etc.
+  const [subView, setSubView] = useState('store'); // Default ke 'store'
 
   const tabVariants = {
     initial: { opacity: 0, y: 10 },
@@ -13,17 +14,19 @@ const PengaturanView = (props) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Sub-Navigasi / Tabs */}
       <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+        <TabButton
+          label="Pengaturan Toko"
+          isActive={subView === 'store'}
+          onClick={() => setSubView('store')}
+        />
         <TabButton
           label="Manajemen Kategori"
           isActive={subView === 'categories'}
           onClick={() => setSubView('categories')}
         />
-        {/* Di sini kita bisa menambahkan tab pengaturan lain di masa depan */}
       </div>
 
-      {/* Konten Tab */}
       <div className="flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
@@ -35,6 +38,13 @@ const PengaturanView = (props) => {
             transition={{ duration: 0.3 }}
             className="h-full"
           >
+            {subView === 'store' && (
+              <StoreSettingsView
+                settings={props.storeSettings}
+                onSave={props.onSaveStoreSettings}
+                isLoading={props.isSavingSettings}
+              />
+            )}
             {subView === 'categories' && (
               <CategoryManagementView
                 categories={props.categories}

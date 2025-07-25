@@ -36,18 +36,12 @@ const SyncStatusIcon = ({ status, onManualSync }) => {
 };
 
 
-const Header = ({ currentView, user, onLogout, syncStatus, onManualSync, onOpenConsole }) => {
+const Header = ({ user, onLogout, syncStatus, onManualSync, onOpenConsole, storeSettings }) => {
   const { theme, toggleTheme } = useTheme();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   
-  const viewTitles = {
-    dashboard: 'Dashboard',
-    kasir: 'Kasir',
-    laporan: 'Laporan',
-    suplier: 'Suplier',
-    pengaturan: 'Pengaturan',
-  };
+  // --- PERBAIKAN DI SINI: Hapus variabel viewTitles yang tidak terpakai ---
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -61,16 +55,25 @@ const Header = ({ currentView, user, onLogout, syncStatus, onManualSync, onOpenC
 
   return (
     <header 
-      className="bg-white dark:bg-gray-800 shadow-md p-4 flex items-center justify-between z-10 dark:border-b dark:border-gray-700"
+      className="bg-white dark:bg-gray-800 shadow-md p-3 flex items-center justify-between z-10 dark:border-b dark:border-gray-700"
       onDoubleClick={onOpenConsole}
     >
       <div className="flex items-center gap-3">
-        <div className="bg-blue-600 p-2 rounded-lg text-white">
-          <ShoppingBag size={24} />
+        <div className="w-10 h-10">
+          {storeSettings?.logo_url ? (
+            <img 
+              src={storeSettings.logo_url} 
+              alt="Logo Toko" 
+              className="w-full h-full rounded-md object-cover" 
+            />
+          ) : (
+            <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center">
+              <ShoppingBag size={24} className="text-gray-500" />
+            </div>
+          )}
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-800 dark:text-white">KasirKu</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 lg:hidden">{viewTitles[currentView]}</p>
+          <h1 className="text-lg font-bold text-gray-800 dark:text-white">{storeSettings?.name || 'KasirKu'}</h1>
         </div>
       </div>
 
@@ -81,13 +84,13 @@ const Header = ({ currentView, user, onLogout, syncStatus, onManualSync, onOpenC
           className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           title={theme === 'light' ? 'Aktifkan Mode Gelap' : 'Aktifkan Mode Terang'}
         >
-          {theme === 'light' ? <Moon size={22} /> : <Sun size={22} />}
+          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
         </button>
 
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center font-bold text-lg text-gray-700 dark:text-white ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ring-transparent hover:ring-blue-500 transition-all"
+            className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center font-bold text-base text-gray-700 dark:text-white ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ring-transparent hover:ring-blue-500 transition-all"
           >
             {user?.email ? user.email[0].toUpperCase() : '?'}
           </button>

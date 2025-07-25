@@ -1,10 +1,10 @@
 import React from 'react';
 import ProductSkeleton from '../components/ProductSkeleton';
 import EmptyState from '../components/EmptyState';
-import { X, ShoppingCart, Search } from 'lucide-react';
+import { X, ShoppingCart, Search, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCategoryId, cart, addToCart, updateQuantity, total, onInitiateCheckout, searchTerm, setSearchTerm, isMobile, isCartVisible, setIsCartVisible }) => {
+const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCategoryId, cart, addToCart, updateQuantity, total, onInitiateCheckout, searchTerm, setSearchTerm, isMobile, isCartVisible, setIsCartVisible, onShowMore, hasMoreProducts }) => {
   
   const filteredProducts = products?.filter(p => {
     const matchesCategory = activeCategoryId === 'all' ? true : p.category_id === activeCategoryId;
@@ -27,12 +27,10 @@ const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCate
     visible: { y: 0, opacity: 1 }
   };
 
-  // Kita definisikan konten keranjang di sini agar bisa dipakai ulang
   const CartContent = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 flex justify-between items-center border-b dark:border-gray-700">
         <h2 className="text-2xl font-bold dark:text-white">Keranjang</h2>
-        {/* Tombol tutup hanya muncul di mode mobile (saat jadi modal) */}
         {isMobile && (
           <button onClick={() => setIsCartVisible(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
             <X size={24} />
@@ -75,13 +73,8 @@ const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCate
   );
 
   return (
-    <>
-      {/* Daftar Produk (Tidak Berubah) */}
+    <div className="flex flex-col lg:flex-row gap-6 h-full">
       <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col">
-        <div className="mb-4">
-          <h1 className="text-3xl font-bold dark:text-white">Pilih Produk</h1>
-          <p className="text-gray-500 dark:text-gray-400">Klik produk untuk ditambahkan ke keranjang.</p>
-        </div>
         <div className="mb-4">
           <input 
             type="text"
@@ -108,53 +101,65 @@ const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCate
             </button>
           ))}
         </div>
-        {products === undefined ? (
-          <ProductSkeleton />
-        ) : (
-          <div className="flex-1 overflow-y-auto">
-            {filteredProducts && filteredProducts.length > 0 ? (
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-              >
-                {filteredProducts.map(p => (
-                  <motion.div
-                    key={p.id}
-                    variants={itemVariants}
-                    whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => addToCart(p)}
-                    className="border dark:border-gray-700 rounded-lg p-3 text-center cursor-pointer shadow-sm hover:shadow-xl flex flex-col justify-between bg-gray-50 dark:bg-gray-700/50"
+        
+        <div className="flex-1 overflow-y-auto">
+          {products === undefined ? (
+            <ProductSkeleton />
+          ) : (
+            <>
+              {filteredProducts && filteredProducts.length > 0 ? (
+                <motion.div
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+                >
+                  {filteredProducts.map(p => (
+                    <motion.div
+                      key={p.id}
+                      variants={itemVariants}
+                      whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => addToCart(p)}
+                      className="border dark:border-gray-700 rounded-lg p-3 text-center cursor-pointer shadow-sm hover:shadow-xl flex flex-col justify-between bg-gray-50 dark:bg-gray-700/50"
+                    >
+                      <img src={p.image_url || 'https://placehold.co/150'} alt={p.name} className="w-full h-24 object-cover rounded-md mx-auto mb-2"/>
+                      <div>
+                        <h3 className="font-semibold text-sm">{p.name}</h3>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              ) : (
+                <EmptyState
+                  icon={Search}
+                  title="Produk Tidak Ditemukan"
+                  message="Coba kata kunci atau filter kategori yang berbeda."
+                />
+              )}
+              
+              {hasMoreProducts && (
+                <div className="mt-6 text-center">
+                  <button 
+                    onClick={onShowMore}
+                    className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold px-6 py-2 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center gap-2 mx-auto"
                   >
-                    <img src={p.image_url || 'https://placehold.co/150'} alt={p.name} className="w-full h-24 object-cover rounded-md mx-auto mb-2"/>
-                    <div>
-                      <h3 className="font-semibold text-sm">{p.name}</h3>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Rp {Number(p.price).toLocaleString('id-ID')}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            ) : (
-              <EmptyState
-                icon={Search}
-                title="Produk Tidak Ditemukan"
-                message="Coba kata kunci atau filter kategori yang berbeda."
-              />
-            )}
-          </div>
-        )}
+                    <ChevronDown size={20} />
+                    Muat Lebih Banyak
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
-
-      {/* --- BAGIAN KERANJANG (DIPERBARUI) --- */}
+      
       {!isMobile ? (
-        // Tampilan Desktop: Panel di sebelah kanan
         <div className="w-1/3 bg-white dark:bg-gray-800 rounded-lg shadow">
           <CartContent />
         </div>
       ) : (
-        // Tampilan Mobile: Modal Overlay di Tengah
         <AnimatePresence>
           {isCartVisible && (
             <motion.div
@@ -179,7 +184,6 @@ const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCate
         </AnimatePresence>
       )}
 
-      {/* Tombol Apung (Tidak Berubah) */}
       {!isCartVisible && isMobile && (
         <button 
           onClick={() => setIsCartVisible(true)}
@@ -191,7 +195,7 @@ const PointOfSaleView = ({ products, categories, activeCategoryId, setActiveCate
           )}
         </button>
       )}
-    </>
+    </div>
   );
 };
 

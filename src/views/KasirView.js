@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import PointOfSaleView from './PointOfSaleView'; // Import komponen yang baru diubah namanya
+import PointOfSaleView from './PointOfSaleView';
 import ProductManagementView from './ProductManagementView';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const KasirView = (props) => {
-  const [subView, setSubView] = useState('pos'); // 'pos' atau 'products'
+  const [subView, setSubView] = useState('pos');
 
   const tabVariants = {
     initial: { opacity: 0, y: 10 },
@@ -14,7 +14,6 @@ const KasirView = (props) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Sub-Navigasi / Tabs */}
       <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
         <TabButton
           label="Point of Sale"
@@ -28,7 +27,6 @@ const KasirView = (props) => {
         />
       </div>
 
-      {/* Konten Tab */}
       <div className="flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
@@ -47,6 +45,9 @@ const KasirView = (props) => {
                 onAdd={props.onAddProduct}
                 onEdit={props.onEditProduct}
                 onDelete={props.onDeleteProduct}
+                // --- PERUBAHAN DI SINI: Teruskan props pagination ---
+                onShowMore={props.onShowMore}
+                hasMoreProducts={props.hasMoreProducts}
               />
             )}
           </motion.div>
@@ -56,7 +57,6 @@ const KasirView = (props) => {
   );
 };
 
-// Komponen kecil untuk tombol tab
 const TabButton = ({ label, isActive, onClick }) => (
   <button
     onClick={onClick}

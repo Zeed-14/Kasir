@@ -1,14 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
-const ProductFormModal = ({ product, categories, onSave, onClose }) => {
+// Terima prop baru: supliers
+const ProductFormModal = ({ product, categories, supliers, onSave, onClose }) => {
   const [formData, setFormData] = useState({
     name: product?.name || '',
     price: product?.price || 0,
     stock: product?.stock || 0,
     image_url: product?.image_url || '',
     category_id: product?.category_id || '',
+    supplier_id: product?.supplier_id || '', // <-- State baru
   });
+
+  // Efek untuk memastikan state diperbarui jika produk berubah
+  useEffect(() => {
+    setFormData({
+      name: product?.name || '',
+      price: product?.price || 0,
+      stock: product?.stock || 0,
+      image_url: product?.image_url || '',
+      category_id: product?.category_id || '',
+      supplier_id: product?.supplier_id || '',
+    });
+  }, [product]);
+
 
   const handleChange = (e) => {
     const { name, value, type } = e.target;
@@ -17,7 +32,12 @@ const ProductFormModal = ({ product, categories, onSave, onClose }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({ ...formData, category_id: formData.category_id || null });
+    // Kirim null jika tidak ada yang dipilih
+    onSave({ 
+      ...formData, 
+      category_id: formData.category_id || null,
+      supplier_id: formData.supplier_id || null,
+    });
   };
 
   return (
@@ -64,6 +84,21 @@ const ProductFormModal = ({ product, categories, onSave, onClose }) => {
               <option value="">-- Tanpa Kategori --</option>
               {categories?.map(cat => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+          {/* --- DROPDOWN SUPLIER BARU --- */}
+          <div>
+            <label className="block text-gray-700 dark:text-gray-300 mb-2">Suplier (Opsional)</label>
+            <select
+              name="supplier_id"
+              value={formData.supplier_id || ''}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">-- Tanpa Suplier --</option>
+              {supliers?.map(sup => (
+                <option key={sup.id} value={sup.id}>{sup.name}</option>
               ))}
             </select>
           </div>
